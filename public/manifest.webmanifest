@@ -1,0 +1,19 @@
+{
+  "name": "StatVibe",
+  "short_name": "StatVibe",
+  "description": "Real-time business analytics and AI-powered workspace.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f4f1",
+  "theme_color": "#0e7c66",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

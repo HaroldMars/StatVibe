@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e7c66" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="StatVibe" />
+  <link rel="apple-touch-icon" href="./logo.svg" />
+  <title>StatVibe — Run the whole business from one screen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="./logo.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="stage">
+    <aside class="stage-copy">
+      <div class="brandline">
+        <img src="./logo.svg" alt="StatVibe" style="width:46px;height:46px;border-radius:13px" />
+        <div>
+          <h1>StatVibe</h1>
+          <div class="tag">Run the whole business from one screen.</div>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:13.5px;line-height:1.55;margin:0">
+        A worldwide-class business app — real-time analytics, a business calculator,
+        an idea &amp; project hub, a multi-model AI workspace, and the AgentTech client
+        assistant. Built for teams of any size, in any industry.
+      </p>
+      <h2>Everything in one place</h2>
+      <ul>
+        <li><span class="dot">📊</span><span><b>Predictive dashboards</b><span>See what's coming, not just what happened</span></span></li>
+        <li><span class="dot">🧮</span><span><b>Business calculator</b><span>Retail pricing, margin &amp; live supply tracking</span></span></li>
+        <li><span class="dot">✨</span><span><b>Multi-model AI workspace</b><span>Blend the best models for every task</span></span></li>
+        <li><span class="dot">💬</span><span><b>AgentTech assistant</b><span>AI handles client &amp; partner messaging</span></span></li>
+      </ul>
+      <div class="ai-status" id="aiStatus"><i></i><span>Checking local AI…</span></div>
+      <div class="credit">A new, upcoming project of <b>Illuminary Peak Company</b> · 2026</div>
+    </aside>
+
+    <div class="device">
+      <div class="island"></div>
+      <div class="statusbar">
+        <span class="time">9:41</span>
+        <span class="icons" aria-hidden="true">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx=".7"/><rect x="4.8" y="5" width="3.2" height="7" rx=".7"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx=".7"/><rect x="14.4" y="0" width="3.2" height="12" rx=".7"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="#000" stroke-opacity=".35" fill="none"/><rect x="2" y="2" width="18" height="9" rx="2"/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill-opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="viewport" id="app"><!-- screens render here --></div>
+      <div class="toast" id="toast"></div>
+      <div class="sheet-backdrop" id="sheetBackdrop"></div>
+      <div class="sheet" id="sheet"></div>
+      <div class="home-indicator"></div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

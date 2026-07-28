@@ -1,0 +1,20 @@
+{
+  "name": "statvibe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StatVibe — a worldwide-class business application. Real-time analytics, business calculator, idea & project hub, multi-model AI workspace, and the AgentTech client assistant. A new, upcoming project of Illuminary Peak Company.",
+  "author": "Illuminary Peak Company",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test test/*.test.js",
+    "smoke": "node test/smoke.mjs"
+  },
+  "dependencies": {}
+}
