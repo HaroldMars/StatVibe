@@ -118,17 +118,15 @@ function imgSrc(src, { w, h } = {}) {
   if (h) tr.push(`h_${Math.round(h)}`);
   return `${base}/${tr.join(',')}/${encodeURIComponent(full)}`;
 }
-const STORAGE = { REMEMBER: 'sv_remember', LOCAL_TOKEN: 'sv_token', SESSION_TOKEN: 'sv_session_token', THEME: 'sv_theme' };
+const STORAGE = { LOCAL_TOKEN: 'sv_token', SESSION_TOKEN: 'sv_session_token', THEME: 'sv_theme' };
 function persistToken(token, remember) {
   try {
     if (remember) {
       localStorage.setItem(STORAGE.LOCAL_TOKEN, token);
-      localStorage.setItem(STORAGE.REMEMBER, '1');
       sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
     } else {
       sessionStorage.setItem(STORAGE.SESSION_TOKEN, token);
       localStorage.removeItem(STORAGE.LOCAL_TOKEN);
-      localStorage.setItem(STORAGE.REMEMBER, '0');
     }
   } catch { /* ignore */ }
 }
@@ -136,6 +134,7 @@ function clearTokenStorage() {
   try {
     localStorage.removeItem(STORAGE.LOCAL_TOKEN);
     sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
+    localStorage.removeItem('sv_remember');
   } catch { /* ignore */ }
 }
 
@@ -154,7 +153,9 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
 function applySession(data, opts = {}) {
   if (data.token) {
     state.session.token = data.token;
-    if (opts.persist !== false) persistToken(data.token, opts.remember !== false);
+    // Real accounts always persist; guests stay session-only.
+    const remember = opts.remember != null ? opts.remember : !(data.user && data.user.isGuest);
+    if (opts.persist !== false) persistToken(data.token, remember);
   }
   if (data.user) {
     state.session.user = data.user;
@@ -162,7 +163,14 @@ function applySession(data, opts = {}) {
     state.profile.email = data.user.email || 'Guest session';
     state.profile.role = data.user.isGuest ? 'Guest' : 'Owner';
   }
-  if (data.account) state.session.account = data.account;
+  if (data.account) {
+    state.session.account = data.account;
+    if (data.account.plan) {
+      state.plan = data.account.plan;
+      const limits = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
+      if (limits[data.account.plan]) state.usage.limit = limits[data.account.plan];
+    }
+  }
   if (data.inventory) state.session.inventory = data.inventory;
   state.authed = !!state.session.user;
 }
@@ -427,10 +435,7 @@ screens.login = () => `
         <button class="pill" type="button" data-act="togglePwd" data-target="loginPwd">Show</button>
       </div>
     </div>
-    <label class="flex items-center" style="gap:8px;margin-top:-2px;margin-bottom:12px;cursor:pointer">
-      <input id="loginRemember" type="checkbox" ${state.auth.remember ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--teal)" />
-      <span style="font-size:12px;color:var(--muted)">Remember me on this device</span>
-    </label>
+    <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.45">You'll stay signed in on this device until you sign out or delete your account.</div>
     <button class="btn" data-act="doLogin" style="margin-top:4px">Sign in</button>
     <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">New here? <b data-act="toRegister" style="color:var(--teal);cursor:pointer">Create an account</b></div>
     <div style="text-align:center;margin-top:10px"><b data-act="guest" style="font-size:12.5px;color:var(--muted-2);cursor:pointer">Continue as guest instead</b></div>
@@ -1843,10 +1848,9 @@ async function doRegister() {
 }
 async function doLogin() {
   const email = (($('#loginEmail') || {}).value || '').trim(), password = ($('#loginPwd') || {}).value;
-  const remember = !!(($('#loginRemember') || {}).checked);
-  state.auth.remember = remember;
+  state.auth.remember = true;
   const { status, data } = await api('/auth/login', { method: 'POST', auth: false, body: { email, password } });
-  if (status === 200) { applySession(data, { remember }); state.stack = []; state.tab = 'stats'; render(); toast('Welcome back'); }
+  if (status === 200) { applySession(data, { remember: true }); state.stack = []; state.tab = 'stats'; render(); toast('Welcome back'); }
   else toast(data.error || 'Sign in failed');
 }
 async function doLogout() {
@@ -1941,7 +1945,7 @@ function changePasswordSheet() {
   setTimeout(() => { const b = document.getElementById('cpSave'); if (b) b.onclick = async () => {
     const currentPassword = (document.getElementById('cpCur') || {}).value, newPassword = (document.getElementById('cpNew') || {}).value;
     const { status, data } = await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
-    if (status === 200) { if (data.token) { state.session.token = data.token; persistToken(data.token, state.auth.remember); } closeSheet(); toast('Password updated'); }
+    if (status === 200) { if (data.token) { state.session.token = data.token; persistToken(data.token, true); } closeSheet(); toast('Password updated'); }
     else toast(data.error || 'Could not update password');
   }; }, 30);
 }
@@ -2119,12 +2123,15 @@ function currencySheet() {
 }
 
 /* ---- Plans ---- */
-function doUpgrade(name) {
+async function doUpgrade(name) {
   if (name === 'Enterprise') { toast('Enterprise — our team will reach out'); return; }
-  state.plan = name;
-  const map = { Free: 1000, Pro: 10000, Business: 50000 };
-  state.usage.limit = map[name] || state.usage.limit;
-  render(); toast(`Upgraded to ${name} ✓`);
+  const { status, data } = await api('/account/upgrade', { method: 'POST', body: { plan: name } });
+  if (status === 200) {
+    state.session.account = data.account;
+    state.plan = name;
+    if (data.usageLimit) state.usage.limit = data.usageLimit;
+    render(); toast(`Upgraded to ${name} ✓`);
+  } else toast(data.error || 'Upgrade failed');
 }
 
 /* ----------------------------------------------------------------------- */
@@ -2164,16 +2171,15 @@ async function boot() {
     state.session.cloudinary = m.cloudinary || null;
   } catch { /* offline */ }
   await loadModels();
-  let remember = true;
-  try { remember = localStorage.getItem(STORAGE.REMEMBER) !== '0'; } catch { /* ignore */ }
-  state.auth.remember = remember;
+  state.auth.remember = true;
   let tok = null;
-  try { tok = remember ? localStorage.getItem(STORAGE.LOCAL_TOKEN) : sessionStorage.getItem(STORAGE.SESSION_TOKEN); } catch { /* ignore */ }
+  try { tok = localStorage.getItem(STORAGE.LOCAL_TOKEN) || sessionStorage.getItem(STORAGE.SESSION_TOKEN); } catch { /* ignore */ }
   if (tok) {
     state.session.token = tok;
     const { status, data } = await api('/auth/me');
     if (status === 200) {
-      applySession(data, { persist: false });
+      // Re-persist real accounts so they survive across visits.
+      applySession(data, { remember: !(data.user && data.user.isGuest) });
       if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory(), loadConversations()]); }
     } else { clearTokenStorage(); state.session.token = null; }
   }

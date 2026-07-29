@@ -358,7 +358,25 @@ test('admin: registered users list + token metrics present', async () => {
   assert.ok(r.json.users.some((u) => u.email === 'alpha@test.co' && u.business === 'Alpha Co' && u.currency === 'PHP'));
   const s = await req('GET', '/api/admin/summary', { headers: { 'x-admin-token': 'test-token' } });
   assert.ok(s.json.users.total >= 1);
+  assert.ok(s.json.users.registered >= 1);
+  assert.ok(Array.isArray(s.json.users.signups));
+  assert.ok(s.json.payments);
+  assert.ok(s.json.privacy && s.json.privacy.note);
   assert.ok(s.json.metrics.tokens && typeof s.json.metrics.tokens.total === 'number');
+});
+
+test('account upgrade records payment and shows in admin', async () => {
+  const up = await req('POST', '/api/account/upgrade', { headers: auth(alphaToken), body: { plan: 'Pro' } });
+  assert.equal(up.status, 200);
+  assert.equal(up.json.account.plan, 'Pro');
+  assert.equal(up.json.payment.plan, 'Pro');
+  const users = await req('GET', '/api/admin/users', { headers: { 'x-admin-token': 'test-token' } });
+  const row = users.json.users.find((u) => u.email === 'alpha@test.co');
+  assert.equal(row.plan, 'Pro');
+  assert.equal(row.phone, undefined);
+  const pays = await req('GET', '/api/admin/payments', { headers: { 'x-admin-token': 'test-token' } });
+  assert.equal(pays.status, 200);
+  assert.ok(pays.json.payments.some((p) => p.plan === 'Pro' && p.email === 'alpha@test.co'));
 });
 
 test('AI chat records token usage', async () => {

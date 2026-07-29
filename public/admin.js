@@ -1,14 +1,15 @@
 /* ==========================================================================
    StatVibe — Developer Console (separate app, served at /admin)
-   Only developers with an admin account can sign in. The first ("founder")
-   account is seeded on the server from ADMIN_USER / ADMIN_PASSWORD.
+   Ops dashboard: user stats, plan upgrades/transactions, AI metrics.
+   Privacy: no passwords, chat messages, AI prompts, or phone numbers.
    ========================================================================== */
 'use strict';
 
-const S = { token: null, admin: null, summary: null, admins: null, users: null, testOut: null, busy: false };
+const S = { token: null, admin: null, summary: null, admins: null, users: null, payments: null, testOut: null, busy: false };
 const $ = (s, r = document) => r.querySelector(s);
 const el = () => document.getElementById('adm');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = (n) => '$' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200); }
 function applyTheme() { document.documentElement.setAttribute('data-theme', window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
@@ -41,6 +42,26 @@ function loginView() {
   </div>`;
 }
 
+function barChart(items, { labelKey = 'label', valueKey = 'value', color = 'var(--teal)' } = {}) {
+  const vals = items.map((i) => Number(i[valueKey]) || 0);
+  const max = Math.max(1, ...vals);
+  return `<div class="adm-bars">${items.map((i) => {
+    const v = Number(i[valueKey]) || 0;
+    const h = Math.max(4, Math.round((v / max) * 72));
+    return `<div class="adm-bar"><i style="height:${h}px;background:${color}"></i><span>${esc(i[labelKey])}</span><b>${v}</b></div>`;
+  }).join('')}</div>`;
+}
+
+function sparkline(signups) {
+  const max = Math.max(1, ...signups.map((d) => d.count));
+  return `<div class="adm-spark">${signups.map((d) => {
+    const h = Math.max(2, Math.round((d.count / max) * 48));
+    const day = new Date(d.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `<div class="adm-spark-col" title="${esc(day)}: ${d.count}"><i style="height:${h}px"></i></div>`;
+  }).join('')}</div>
+  <div class="adm-spark-labels"><span>${esc(new Date(signups[0].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</span><span>Last 14 days</span><span>${esc(new Date(signups[signups.length - 1].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</span></div>`;
+}
+
 /* ---------------- Console ---------------- */
 function consoleView() {
   const s = S.summary || {}, cfg = s.config || { cloudAvailable: {} }, m = s.metrics || {};
@@ -49,7 +70,12 @@ function consoleView() {
   const toggle = (on, a, extra = '') => `<button class="toggle ${on ? 'on' : ''}" data-a="${a}" ${extra}></button>`;
   const byModel = Object.entries(m.byModel || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ') || 'none yet';
   const tk = m.tokens || { total: 0, byModel: {} };
-  const users = s.users || { total: 0, active_24h: 0, active_7d: 0 };
+  const users = s.users || { total: 0, registered: 0, guests: 0, setupComplete: 0, active_24h: 0, active_7d: 0, byPlan: {}, signups: [] };
+  const pay = s.payments || { total: 0, paid: 0, revenue: 0, byPlan: {} };
+  const planBars = Object.entries(users.byPlan || {}).filter(([, n]) => n > 0).map(([label, value]) => ({ label, value }));
+  const payBars = Object.entries(pay.byPlan || {}).map(([label, value]) => ({ label, value }));
+  const signups = users.signups || [];
+
   return `
   <div class="adm-top">
     <div class="adm-brand">
@@ -59,6 +85,33 @@ function consoleView() {
     <div style="display:flex;gap:8px">
       <button class="pill" data-a="refresh">↻ Refresh</button>
       <button class="pill" data-a="logout" style="color:var(--red)">Sign out</button>
+    </div>
+  </div>
+
+  <div class="adm-card" style="background:var(--teal-tint);border-color:var(--teal-tint-border)">
+    <p class="adm-eyebrow" style="color:var(--teal-deep)">Privacy boundary</p>
+    <div style="font-size:12.5px;color:var(--ink-2);line-height:1.5">${esc((s.privacy && s.privacy.note) || 'Admin sees directory + ops metrics only. Passwords, chats, AI prompts, and phone numbers stay private.')}</div>
+  </div>
+
+  <div class="adm-stat-grid">
+    <div class="adm-stat"><div class="n">${users.total || 0}</div><div class="l">Total users</div></div>
+    <div class="adm-stat"><div class="n">${users.registered || 0}</div><div class="l">Registered</div></div>
+    <div class="adm-stat"><div class="n">${users.guests || 0}</div><div class="l">Guests</div></div>
+    <div class="adm-stat"><div class="n">${users.setupComplete || 0}</div><div class="l">Setup done</div></div>
+    <div class="adm-stat"><div class="n">${users.active_24h || 0}</div><div class="l">Active 24h</div></div>
+    <div class="adm-stat"><div class="n">${users.active_7d || 0}</div><div class="l">Active 7d</div></div>
+    <div class="adm-stat"><div class="n">${pay.paid || 0}</div><div class="l">Upgrades / txs</div></div>
+    <div class="adm-stat"><div class="n">${money(pay.revenue)}</div><div class="l">Upgrade volume</div></div>
+  </div>
+
+  <div class="adm-grid">
+    <div class="adm-card">
+      <p class="adm-eyebrow">Users by plan</p>
+      ${planBars.length ? barChart(planBars) : '<div style="font-size:12px;color:var(--muted-2)">No plan data yet.</div>'}
+    </div>
+    <div class="adm-card">
+      <p class="adm-eyebrow">Signups · 14 days</p>
+      ${signups.length ? sparkline(signups) : '<div style="font-size:12px;color:var(--muted-2)">No signup history yet.</div>'}
     </div>
   </div>
 
@@ -101,13 +154,24 @@ function consoleView() {
   </div>
 
   <div class="adm-card">
-    <p class="adm-eyebrow">Registered users · ${users.total} total · ${users.active_24h} active (24h) · ${users.active_7d} active (7d)</p>
+    <p class="adm-eyebrow">Accounts directory · ${users.total || 0} total · privacy-safe fields only</p>
     ${(S.users || []).length
       ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-          <thead><tr style="text-align:left;color:var(--muted-2)"><th style="padding:6px 8px 6px 0;font-weight:600">User</th><th style="padding:6px 8px;font-weight:600">Business</th><th style="padding:6px 8px;font-weight:600">Cur</th><th style="padding:6px 8px;font-weight:600">Items</th><th style="padding:6px 0 6px 8px;font-weight:600">Joined</th></tr></thead>
-          <tbody>${S.users.map((u) => `<tr style="border-top:1px solid var(--hairline)"><td style="padding:8px 8px 8px 0"><div style="font-weight:500">${esc(u.name || (u.isGuest ? 'Guest' : '—'))}</div><div style="color:var(--muted-3);font-size:11px">${esc(u.email || u.tag)}${u.isGuest ? ' · guest' : ''}</div></td><td style="padding:8px">${esc(u.business || '—')}</td><td style="padding:8px">${esc(u.currency || '—')}</td><td style="padding:8px">${u.items}</td><td style="padding:8px 0 8px 8px;color:var(--muted-2)">${new Date(u.createdAt).toLocaleDateString()}</td></tr>`).join('')}</tbody>
+          <thead><tr style="text-align:left;color:var(--muted-2)"><th style="padding:6px 8px 6px 0;font-weight:600">User</th><th style="padding:6px 8px;font-weight:600">Business</th><th style="padding:6px 8px;font-weight:600">Plan</th><th style="padding:6px 8px;font-weight:600">Cur</th><th style="padding:6px 8px;font-weight:600">Items</th><th style="padding:6px 0 6px 8px;font-weight:600">Joined</th></tr></thead>
+          <tbody>${S.users.map((u) => `<tr style="border-top:1px solid var(--hairline)"><td style="padding:8px 8px 8px 0"><div style="font-weight:500">${esc(u.name || (u.isGuest ? 'Guest' : '—'))}</div><div style="color:var(--muted-3);font-size:11px">${esc(u.email || u.tag)}${u.isGuest ? ' · guest' : ''}${u.setup ? '' : ' · setup pending'}</div></td><td style="padding:8px">${esc(u.business || '—')}</td><td style="padding:8px"><span class="tagchip green">${esc(u.plan || 'Free')}</span></td><td style="padding:8px">${esc(u.currency || '—')}</td><td style="padding:8px">${u.items}</td><td style="padding:8px 0 8px 8px;color:var(--muted-2)">${new Date(u.createdAt).toLocaleDateString()}</td></tr>`).join('')}</tbody>
         </table></div>`
-      : '<div style="font-size:12px;color:var(--muted-2)">Loading users…</div>'}
+      : '<div style="font-size:12px;color:var(--muted-2)">No users yet.</div>'}
+  </div>
+
+  <div class="adm-card">
+    <p class="adm-eyebrow">Transactions & upgrades · ${pay.total || 0} recorded · ${money(pay.revenue)} volume</p>
+    ${payBars.length ? `<div style="margin-bottom:14px">${barChart(payBars, { color: 'linear-gradient(180deg, var(--teal), #7a85ff)' })}</div>` : ''}
+    ${(S.payments || []).length
+      ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="text-align:left;color:var(--muted-2)"><th style="padding:6px 8px 6px 0;font-weight:600">When</th><th style="padding:6px 8px;font-weight:600">User</th><th style="padding:6px 8px;font-weight:600">Plan</th><th style="padding:6px 8px;font-weight:600">Amount</th><th style="padding:6px 0 6px 8px;font-weight:600">Status</th></tr></thead>
+          <tbody>${S.payments.map((p) => `<tr style="border-top:1px solid var(--hairline)"><td style="padding:8px 8px 8px 0;color:var(--muted-2)">${new Date(p.createdAt).toLocaleString()}</td><td style="padding:8px"><div style="font-weight:500">${esc(p.name || '—')}</div><div style="color:var(--muted-3);font-size:11px">${esc(p.email || 'guest / anonymized')}</div></td><td style="padding:8px">${esc(p.previousPlan ? p.previousPlan + ' → ' : '')}${esc(p.plan || '—')}</td><td style="padding:8px">${money(p.amount)} ${esc(p.currency || '')}</td><td style="padding:8px 0 8px 8px"><span class="tagchip ${p.status === 'paid' || p.status === 'demo' || p.status === 'free' ? 'green' : 'amber'}">${esc(p.status || '—')}</span></td></tr>`).join('')}</tbody>
+        </table></div>`
+      : '<div style="font-size:12px;color:var(--muted-2)">No upgrades or payments yet. Plan upgrades from the app appear here.</div>'}
   </div>
 
   <div class="adm-card">
@@ -165,6 +229,7 @@ async function refresh() {
   if (status === 200) {
     S.summary = data;
     const u = await apiAdmin('users'); if (u.status === 200) S.users = u.data.users;
+    const p = await apiAdmin('payments'); if (p.status === 200) S.payments = p.data.payments;
     if (S.admin && S.admin.role === 'founder') { const a = await apiAdmin('accounts'); if (a.status === 200) S.admins = a.data.admins; }
     render();
   } else { logout(); }

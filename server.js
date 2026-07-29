@@ -103,7 +103,9 @@ const CURRENCIES = [
   { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit', dp: 2 },
 ];
 const CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
-const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 days
+const SESSION_TTL = 3650 * 24 * 3600 * 1000; // ~10 years — stay signed in until logout / delete account
+const PLAN_PRICES = { Free: 0, Pro: 29, Business: 79, Enterprise: 0 };
+const PLAN_LIMITS = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
 let _lastTs = 0;
 function monotonicNow() { const t = Date.now(); _lastTs = t > _lastTs ? t : _lastTs + 1; return _lastTs; }
 const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
@@ -378,26 +380,43 @@ async function handleAdmin(req, res, sub, body) {
 
   if (sub === 'summary' && req.method === 'GET') {
     const local = await listOllamaModels();
+    const userStats = await store.adminUserStats();
+    const payStats = await store.paymentStats();
     return sendJSON(res, 200, {
       version: VERSION, uptime_s: Math.round((Date.now() - START) / 1000),
       admin_user: ADMIN_USER, node: process.version, pid: process.pid, port: PORT,
       ollama: { host: OLLAMA, online: local.length > 0, models: local },
       config, metrics: { ...metrics, recent: metrics.recent.slice(0, 12) },
       memory_mb: Math.round(process.memoryUsage().rss / 1048576),
-      users: { total: await store.countUsers(), active_7d: await store.activeSessionUserCount(7 * 86400000), active_24h: await store.activeSessionUserCount(86400000) },
+      users: userStats,
+      payments: payStats,
+      privacy: {
+        note: 'Admin can see account directory + aggregate ops metrics only. Passwords, chat messages, AI prompts, phone numbers, and payment provider payloads are never exposed.',
+      },
     });
   }
   if (sub === 'users' && req.method === 'GET') {
     const accounts = await store.accountsMap();
     const users = await store.listUsers();
     const rows = await Promise.all(users.map(async (u) => ({
-      id: u.id, name: u.name || null, email: u.email || null, tag: u.tag, isGuest: !!u.isGuest,
-      createdAt: u.createdAt, business: (accounts[u.id] && accounts[u.id].businessName) || null,
-      currency: (accounts[u.id] && accounts[u.id].currency) || null, setup: !!(accounts[u.id] && accounts[u.id].setupComplete),
+      id: u.id,
+      name: u.name || null,
+      email: u.isGuest ? null : (u.email || null),
+      tag: u.tag,
+      isGuest: !!u.isGuest,
+      createdAt: u.createdAt,
+      business: (accounts[u.id] && accounts[u.id].businessName) || null,
+      currency: (accounts[u.id] && accounts[u.id].currency) || null,
+      setup: !!(accounts[u.id] && accounts[u.id].setupComplete),
+      plan: (accounts[u.id] && accounts[u.id].plan) || 'Free',
       items: await store.inventoryCount(u.id),
     })));
     rows.sort((a, b) => b.createdAt - a.createdAt);
     return sendJSON(res, 200, { users: rows });
+  }
+  if (sub === 'payments' && req.method === 'GET') {
+    const payments = await store.listPayments(80);
+    return sendJSON(res, 200, { payments });
   }
   if (sub === 'config' && req.method === 'POST') {
     let patch; try { patch = JSON.parse(body || '{}'); } catch { return sendJSON(res, 400, { error: 'Invalid JSON' }); }
@@ -425,12 +444,14 @@ async function getAuthUser(req) {
   if (!m) return null;
   const s = await store.getSession(m[1]);
   if (!s) return null;
+  // Sliding expiry so active accounts stay signed in until logout / delete.
+  await store.touchSession(m[1], Date.now() + SESSION_TTL);
   const u = await store.getUserById(s.userId);
   return u ? { user: u, token: m[1] } : null;
 }
 
 function blankAccount() {
-  return { setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, createdAt: Date.now() };
+  return { setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, plan: 'Free', createdAt: Date.now() };
 }
 
 async function bootstrapUser(base) {
@@ -522,8 +543,40 @@ async function handleAccount(req, res, sub, body) {
     if (b.currency !== undefined) { if (!CURRENCY_CODES.has(b.currency)) return sendJSON(res, 400, { error: 'Unsupported currency' }); acct.currency = b.currency; }
     if (b.businessName !== undefined) acct.businessName = String(b.businessName).trim();
     if (b.industry !== undefined) acct.industry = b.industry;
+    if (b.plan !== undefined) {
+      const plan = String(b.plan);
+      if (!PLAN_PRICES.hasOwnProperty(plan)) return sendJSON(res, 400, { error: 'Unknown plan' });
+      if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise requires sales contact' });
+      acct.plan = plan;
+    }
     await store.setAccount(user.id, acct);
     return sendJSON(res, 200, { ok: true, account: acct });
+  }
+  if (sub === 'upgrade' && req.method === 'POST') {
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const plan = String(b.plan || '');
+    if (!PLAN_PRICES.hasOwnProperty(plan)) return sendJSON(res, 400, { error: 'Unknown plan' });
+    if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise — our team will reach out' });
+    const acct = await store.getAccount(user.id) || blankAccount();
+    const prev = acct.plan || 'Free';
+    acct.plan = plan;
+    await store.setAccount(user.id, acct);
+    const amount = PLAN_PRICES[plan] || 0;
+    const payment = await store.addPayment({
+      id: auth.newId('pay'),
+      userId: user.id,
+      email: user.isGuest ? null : (user.email || null),
+      name: user.name || null,
+      plan,
+      previousPlan: prev,
+      amount,
+      currency: 'USD',
+      status: amount > 0 ? 'demo' : 'free',
+      source: 'in-app-upgrade',
+      createdAt: Date.now(),
+    });
+    log('info', `plan upgrade ${user.id} ${prev} → ${plan}`);
+    return sendJSON(res, 200, { ok: true, account: acct, payment, usageLimit: PLAN_LIMITS[plan] || 1000 });
   }
   if (sub === '' && req.method === 'DELETE') {
     await store.deleteUser(user.id); log('info', 'deleted account ' + user.id);
@@ -739,15 +792,46 @@ async function handleConversations(req, res, sub, body) {
 async function handlePay(req, res, sub, body) {
   const authed = await getAuthUser(req);
   if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  const { user } = authed;
   if (sub === 'qr' && req.method === 'POST') {
     const b = parseJSON(body) || {};
     const key = process.env.PAYMONGO_SECRET_KEY;
-    if (!key) return sendJSON(res, 200, { configured: false, message: 'PayMongo not configured. Set PAYMONGO_SECRET_KEY on the server to enable live QR payments.' });
+    const amount = Math.max(0, Number(b.amount) || 0);
+    const plan = b.plan ? String(b.plan) : null;
+    if (!key) {
+      await store.addPayment({
+        id: auth.newId('pay'),
+        userId: user.id,
+        email: user.isGuest ? null : (user.email || null),
+        name: user.name || null,
+        plan,
+        amount,
+        currency: 'PHP',
+        status: 'pending_unconfigured',
+        source: 'paymongo-qr',
+        createdAt: Date.now(),
+      });
+      return sendJSON(res, 200, { configured: false, message: 'PayMongo not configured. Set PAYMONGO_SECRET_KEY on the server to enable live QR payments.' });
+    }
     // Create a PayMongo QRPh source (amounts are in centavos).
-    const amount = Math.max(2000, Math.round(Number(b.amount || 0) * 100));
+    const centavos = Math.max(2000, Math.round(amount * 100));
     try {
-      const payload = JSON.stringify({ data: { attributes: { amount, currency: 'PHP', type: 'qrph', redirect: { success: b.success || '/', failed: b.failed || '/' } } } });
+      const payload = JSON.stringify({ data: { attributes: { amount: centavos, currency: 'PHP', type: 'qrph', redirect: { success: b.success || '/', failed: b.failed || '/' } } } });
       const result = await httpsJSON('https://api.paymongo.com/v1/sources', payload, key);
+      const sourceId = result && result.data && result.data.id ? result.data.id : null;
+      await store.addPayment({
+        id: auth.newId('pay'),
+        userId: user.id,
+        email: user.isGuest ? null : (user.email || null),
+        name: user.name || null,
+        plan,
+        amount,
+        currency: 'PHP',
+        status: 'pending',
+        source: 'paymongo-qr',
+        sourceId,
+        createdAt: Date.now(),
+      });
       return sendJSON(res, 200, { configured: true, source: result });
     } catch (e) { return sendJSON(res, 502, { configured: true, error: 'PayMongo request failed: ' + e.message }); }
   }
@@ -810,7 +894,10 @@ async function requestHandler(req, res) {
     if (p === '/api/models' && req.method === 'GET') return handleModels(res);
     if (p === '/api/chat' && req.method === 'POST') return handleChat(res, await readBody(req));
     if (p.startsWith('/api/auth/')) return handleAuth(req, res, p.slice('/api/auth/'.length), ['POST', 'PATCH'].includes(req.method) ? await readBody(req) : null);
-    if (p === '/api/account' || p === '/api/account/setup') return handleAccount(req, res, p === '/api/account/setup' ? 'setup' : '', ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
+    if (p === '/api/account' || p.startsWith('/api/account/')) {
+      const sub = p === '/api/account' ? '' : p.slice('/api/account/'.length);
+      return handleAccount(req, res, sub, ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
+    }
     if (p === '/api/inventory' || p.startsWith('/api/inventory/')) return handleInventory(req, res, p === '/api/inventory' ? '' : p.slice('/api/inventory/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/predict' && req.method === 'POST') return handlePredict(req, res, await readBody(req));
     if (p === '/api/ideas' || p.startsWith('/api/ideas/')) return handleIdeas(req, res, p === '/api/ideas' ? '' : p.slice('/api/ideas/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);

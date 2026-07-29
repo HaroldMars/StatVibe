@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="./styles.css" />
   <style>
     body { display: block; padding: 0; background: var(--bg); }
-    .adm-wrap { max-width: 860px; margin: 0 auto; padding: 24px 18px 60px; }
+    .adm-wrap { max-width: 980px; margin: 0 auto; padding: 24px 18px 60px; }
     .adm-top { display: flex; align-items: center; justify-content: space-between; padding: 14px 0 22px; }
     .adm-brand { display: flex; align-items: center; gap: 11px; }
     .adm-logo { width: 40px; height: 40px; border-radius: 11px; background: var(--teal-ink); color: var(--mint); display: flex; align-items: center; justify-content: center; font: 700 18px var(--mono); }
@@ -32,6 +32,20 @@
     .adm-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
     .adm-row:last-child { border-bottom: none; }
     textarea, input, select { font-family: inherit; }
+    .adm-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    @media (max-width: 720px) { .adm-stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .adm-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 12px; }
+    .adm-stat .n { font-family: var(--mono); font-size: 22px; font-weight: 600; letter-spacing: -0.4px; }
+    .adm-stat .l { font-size: 11px; color: var(--muted-2); margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .adm-bars { display: flex; align-items: flex-end; gap: 10px; height: 96px; padding-top: 8px; }
+    .adm-bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    .adm-bar > i { width: 100%; max-width: 36px; border-radius: 6px 6px 2px 2px; display: block; background: var(--teal); }
+    .adm-bar span { font-size: 10px; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .adm-bar b { font-size: 11px; font-family: var(--mono); }
+    .adm-spark { display: flex; align-items: flex-end; gap: 3px; height: 56px; }
+    .adm-spark-col { flex: 1; display: flex; align-items: flex-end; height: 100%; }
+    .adm-spark-col i { display: block; width: 100%; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, var(--teal), #a8b0ff); min-height: 2px; }
+    .adm-spark-labels { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; color: var(--muted-3); }
   </style>
 </head>
 <body>
