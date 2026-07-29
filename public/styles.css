@@ -46,6 +46,15 @@
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 
   --shadow-frame: 0 34px 78px rgba(67, 88, 176, 0.28), 0 0 0 1px rgba(120, 138, 209, 0.18);
+
+  /* iOS safe areas + dynamic viewport (set --vh in JS on resize) */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b-raw: env(safe-area-inset-bottom, 0px);
+  --safe-b: clamp(0px, var(--safe-b-raw), 16px);
+  --app-vh: 100vh;
+  --top-chrome: calc(var(--safe-t) + 12px);
 }
 
 /* ---- Dark theme -------------------------------------------------------- */
@@ -93,16 +102,25 @@ html, body {
   height: 100%;
 }
 
+html {
+  height: -webkit-fill-available;
+}
+
 body {
   font-family: var(--sans);
   background: var(--desk);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   padding: 24px;
+  overscroll-behavior: none;
 }
 
 .mono { font-family: var(--mono); font-feature-settings: 'tnum' 1; }
@@ -139,7 +157,10 @@ body {
 /* ---- iPhone frame --------------------------------------------------------- */
 .device {
   width: min(392px, 100vw);
+  height: min(848px, var(--app-vh));
+  height: min(848px, 100vh);
   height: min(848px, 100dvh);
+  height: min(848px, calc(var(--vh, 1vh) * 100));
   border-radius: 44px;
   background: var(--device-bg);
   box-shadow: var(--shadow-frame);
@@ -170,14 +191,23 @@ body {
 /* On small screens the app fills the window (no frame chrome) */
 @media (max-width: 460px) {
   body { padding: 0; align-items: stretch; }
-  .stage { gap: 0; }
+  .stage { gap: 0; width: 100%; max-width: 100%; }
   .device {
-    width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none;
+    width: 100%;
+    max-width: 100%;
+    height: var(--app-vh);
+    height: 100vh;
+    height: 100dvh;
+    height: calc(var(--vh, 1vh) * 100);
+    border-radius: 0; box-shadow: none;
   }
   .device .island { display: none; }
   .viewport { border-radius: 0; }
   .device .home-indicator { display: none; }
   .device .statusbar { display: none; }
+  .pad { padding-top: calc(var(--top-chrome) + 44px); }
+  .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
+  .appbar { padding-top: calc(var(--top-chrome) + 44px); }
   /* Prevent iOS Safari auto-zoom when focusing form fields. */
   input, textarea, select { font-size: 16px !important; }
 }
@@ -186,14 +216,22 @@ body {
 .screen {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
-  min-height: 100%;
+  min-height: 0;
+  max-height: 100%;
   background:
     radial-gradient(900px 500px at 5% -20%, rgba(139, 167, 255, 0.32), transparent 60%),
     radial-gradient(700px 500px at 95% 0%, rgba(164, 199, 255, 0.28), transparent 58%),
     var(--bg);
   color: var(--ink);
 }
-.scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
 .scroll::-webkit-scrollbar { width: 0; }
 
 .pad { padding: 56px 18px 14px; }
@@ -340,18 +378,22 @@ body {
 /* ---- Bottom tab bar ------------------------------------------------------- */
 .tabbar {
   display: flex; justify-content: space-around; align-items: center;
-  /* Cap bottom inset so simulators/odd browsers don't create giant gaps. */
-  --safe-b: clamp(0px, env(safe-area-inset-bottom), 16px);
+  flex-shrink: 0;
   padding: 6px 8px calc(8px + var(--safe-b));
   min-height: calc(54px + var(--safe-b));
+  padding-left: calc(8px + var(--safe-l));
+  padding-right: calc(8px + var(--safe-r));
   background: color-mix(in oklab, var(--surface) 88%, #ffffff 12%);
   border-top: 1px solid var(--line);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .tabbar button {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: none; border: none; cursor: pointer; color: var(--muted-3);
-  font-family: inherit; font-size: 9px; padding: 1px 6px; -webkit-tap-highlight-color: transparent;
+  font-family: inherit; font-size: 9px; padding: 1px 6px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: color 0.12s ease;
 }
 .tabbar button.active { color: var(--teal); font-weight: 600; }
@@ -366,21 +408,50 @@ body {
 /* Installed PWA — full viewport, no phone chrome, compact tab bar */
 @media (display-mode: standalone) {
   body { padding: 0; align-items: stretch; }
-  .stage { gap: 0; }
+  .stage { gap: 0; width: 100%; max-width: 100%; }
   .device {
-    width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none; border: none;
+    width: 100%;
+    max-width: 100%;
+    height: var(--app-vh);
+    height: 100vh;
+    height: 100dvh;
+    height: calc(var(--vh, 1vh) * 100);
+    border-radius: 0; box-shadow: none; border: none;
   }
   .device .island,
   .device .home-indicator,
   .device .statusbar { display: none; }
   .viewport { border-radius: 0; }
+  .pad { padding-top: calc(var(--top-chrome) + 44px); }
+  .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
+  .appbar { padding-top: calc(var(--top-chrome) + 44px); }
   .tabbar {
-    --safe-b: clamp(0px, env(safe-area-inset-bottom), 12px);
+    --safe-b: clamp(0px, var(--safe-b-raw), 12px);
     padding: 4px 6px calc(6px + var(--safe-b));
+    padding-left: calc(6px + var(--safe-l));
+    padding-right: calc(6px + var(--safe-r));
     min-height: calc(48px + var(--safe-b));
   }
   .tabbar button svg { width: 18px; height: 18px; }
   input, textarea, select { font-size: 16px !important; }
+}
+
+/* iOS Safari / installed home-screen app */
+html.ios .device,
+html.ios.standalone .device {
+  width: 100%;
+  max-width: 100%;
+}
+html.ios .tabbar {
+  --safe-b: clamp(0px, var(--safe-b-raw), 12px);
+}
+html.ios.standalone .pad,
+html.ios.standalone .pad-top,
+html.ios.standalone .appbar {
+  padding-top: calc(var(--top-chrome) + 44px);
+}
+html.ios.standalone .pad-top {
+  padding-top: calc(var(--top-chrome) + 48px);
 }
 
 /* AI forecast / dark insight card */
@@ -397,9 +468,9 @@ body {
 .chat-time { text-align: center; font-size: 10.5px; color: var(--muted-3); }
 .approve-row { align-self: flex-end; display: flex; gap: 8px; }
 
-.composer { padding: 8px 14px 10px; background: var(--surface); border-top: 1px solid var(--line); }
+.composer { padding: 8px 14px calc(10px + var(--safe-b)); padding-left: calc(14px + var(--safe-l)); padding-right: calc(14px + var(--safe-r)); background: var(--surface); border-top: 1px solid var(--line); }
 .composer .inputwrap { display: flex; align-items: center; gap: 9px; background: #f3f3ef; border-radius: 22px; padding: 6px 6px 6px 15px; }
-.composer input { flex: 1; border: none; background: none; outline: none; font: inherit; font-size: 13px; color: var(--ink); }
+.composer input { flex: 1; border: none; background: none; outline: none; font: inherit; font-size: 16px; color: var(--ink); }
 .composer .send { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), #7a85ff); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 
 /* Typing dots */
@@ -411,7 +482,7 @@ body {
 
 /* Toast */
 .toast {
-  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(10px);
+  position: absolute; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%) translateY(10px);
   background: var(--ink); color: #fff; font-size: 12.5px; font-weight: 500;
   padding: 10px 16px; border-radius: 22px; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease; z-index: 200; max-width: 80%; text-align: center;
@@ -430,9 +501,11 @@ body {
   border-radius: 26px 26px 0 0;
   border-top: 1px solid var(--line-2);
   box-shadow: 0 -18px 44px rgba(39, 55, 124, 0.22);
-  z-index: 160; padding: 10px 18px 30px;
+  z-index: 160;
+  padding: 10px calc(18px + var(--safe-r)) calc(30px + var(--safe-b)) calc(18px + var(--safe-l));
   transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   max-height: 82%; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .sheet.show { transform: translateY(0); }
 .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.15); margin: 6px auto 14px; }
@@ -462,4 +535,4 @@ body {
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 a { color: inherit; text-decoration: none; }
-button { font-family: inherit; }
+button { font-family: inherit; touch-action: manipulation; }
