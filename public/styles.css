@@ -52,7 +52,8 @@
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: 0px;
-  --top-chrome: calc(var(--safe-t) + 12px);
+  /* MIXED-style top: safe area + compact header gap only */
+  --top-chrome: calc(var(--safe-t) + 16px);
 }
 
 /* ---- Dark theme -------------------------------------------------------- */
@@ -236,9 +237,9 @@ body {
     position: absolute;
     inset: 0;
   }
-  .pad { padding-top: calc(var(--top-chrome) + 44px); }
-  .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
-  .appbar { padding-top: calc(var(--top-chrome) + 44px); }
+  .pad { padding-top: var(--top-chrome); }
+  .pad-top { padding-top: calc(var(--safe-t) + 18px); }
+  .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
 }
 
 /* ---- Screen scaffold ------------------------------------------------------ */
@@ -450,9 +451,9 @@ body {
   .device .home-indicator,
   .device .statusbar { display: none !important; }
   .viewport { border-radius: 0; position: absolute; inset: 0; }
-  .pad { padding-top: calc(var(--top-chrome) + 44px); }
-  .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
-  .appbar { padding-top: calc(var(--top-chrome) + 44px); }
+  .pad { padding-top: var(--top-chrome); }
+  .pad-top { padding-top: calc(var(--safe-t) + 18px); }
+  .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
   .tabbar { padding: 8px 6px 10px; }
 }
 
@@ -473,9 +474,9 @@ html.ios.standalone .device .island,
 html.ios.standalone .device .home-indicator,
 html.ios.standalone .device .statusbar { display: none !important; }
 html.ios.standalone .viewport { border-radius: 0; position: absolute; inset: 0; }
-html.ios.standalone .pad,
-html.ios.standalone .appbar { padding-top: calc(var(--top-chrome) + 44px); }
-html.ios.standalone .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
+html.ios.standalone .pad { padding-top: var(--top-chrome); }
+html.ios.standalone .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
+html.ios.standalone .pad-top { padding-top: calc(var(--safe-t) + 18px); }
 
 /* AI forecast / dark insight card */
 .insight-actions { display: flex; gap: 8px; margin-top: 11px; }
