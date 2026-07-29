@@ -564,7 +564,7 @@ tabScreens.ai = () => {
   return `
   <div class="scroll pad">
     <div class="row-between mb-14">
-      <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : 'Simulated engine · start Ollama'} · blend for smarter output</div></div>
+      <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine · start Ollama'} · blend for smarter output</div></div>
       <button class="pill" data-act="aiHistory" style="height:34px">🕘 History${state.session.history && state.session.history.length ? ' · ' + state.session.history.length : ''}</button>
     </div>
 
@@ -959,6 +959,7 @@ async function loadModels() {
     state.models.engines = d.engines || [];
     state.models.cloud = d.cloud || [];
     state.models.ollamaOnline = !!d.ollama_online;
+    state.models.hosted = !!d.hosted;
     if (d.admin_user) state.admin.user = d.admin_user;
     if (!state.models.loaded && typeof d.default_blend === 'boolean') state.models.blend = d.default_blend;
     // Drop any active model that no longer exists (e.g. a cloud model disabled by admin).
@@ -971,9 +972,12 @@ async function loadModels() {
     const s = document.getElementById('aiStatus');
     if (s) {
       s.classList.toggle('online', state.models.ollamaOnline);
+      s.classList.toggle('online', state.models.ollamaOnline || state.models.hosted);
       s.querySelector('span').textContent = state.models.ollamaOnline
         ? `Local AI online · ${state.models.engines.map((e) => e.label).join(', ')}`
-        : 'Local AI offline · using simulated engine';
+        : state.models.hosted
+          ? `Hosted AI online · ${state.models.engines.map((e) => e.label).join(', ')}`
+          : 'AI offline · using simulated engine';
     }
   } catch (e) {
     state.models.engines = [{ id: 'simulated', label: 'Simulated', vendor: 'demo', available: true }];

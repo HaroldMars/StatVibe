@@ -1,0 +1,7 @@
+data/
+test/
+scratchpad/
+*.md
+Dockerfile
+Procfile
+.env

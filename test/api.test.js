@@ -45,7 +45,13 @@ async function waitHealthy(tries = 40) {
   throw new Error('server did not become healthy');
 }
 
-test.before(async () => { server = require('../server.js'); await waitHealthy(); });
+test.before(async () => {
+  server = require('../server.js');
+  // server.js only auto-listens when run directly (node server.js); when imported
+  // (tests, or the Vercel function) it does not. Start it explicitly for tests.
+  await new Promise((r) => server.listen(Number(process.env.PORT), '127.0.0.1', r));
+  await waitHealthy();
+});
 test.after(() => { try { server.close(); } catch { /* ignore */ } });
 
 test('GET /api/health → ok with version + security headers', async () => {

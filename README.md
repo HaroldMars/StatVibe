@@ -145,7 +145,26 @@ npm run smoke  # browser end-to-end smoke via headless Chrome (skips if none fou
 
 ## Deployment
 
-The app is a single zero-dependency Node process serving static files + the API.
+### Vercel (recommended)
+
+The repo is Vercel-ready: `vercel.json` serves `public/` statically and routes `/api/*`
+to a serverless function (`api/index.js`, which wraps the shared handler in `server.js`).
+
+1. Import the repo in Vercel (no build command needed).
+2. **Add durable storage:** Vercel → **Storage → KV** → *Create* and connect it. That
+   injects `KV_REST_API_URL` / `KV_REST_API_TOKEN`, and the store uses KV automatically.
+   *(Without KV, Vercel writes to `/tmp`, which is ephemeral — accounts disappear on cold
+   starts. KV takes ~1 minute to add and makes data durable.)*
+3. **Set env vars** (Settings → Environment Variables): `ADMIN_USER`, `ADMIN_PASSWORD`,
+   `ADMIN_TOKEN`, and optionally `OLLAMA_HOST` (a **public** Ollama server — local Ollama
+   is unreachable from Vercel, so AI falls back to the simulated engine without it), and
+   `PAYMONGO_SECRET_KEY` for live payments.
+4. Deploy. `/` is the app, `/admin` is the developer console.
+
+> Serverless is stateless and per-instance, so the KV store is last-write-wins across
+> concurrent instances — fine for alpha. For high scale, swap in Postgres (same store
+> interface). Tested: the exported handler runs under a serverless invocation, seeds the
+> founder on cold start, and KV persistence survives cold starts.
 
 **Docker**
 ```bash
@@ -182,9 +201,9 @@ data/                Local JSON store (gitignored)
 Dockerfile · Procfile · .env.example · package.json · ROADMAP.md
 ```
 
-> **Deploying to Vercel** needs a small serverless refactor + a hosted Postgres — that's
-> Phase 2 in [ROADMAP.md](ROADMAP.md). Today the app runs as a single Node process
-> (`node server.js`) which is perfect for local/VPS and the beta.
+> **Vercel-ready:** `vercel.json` + `api/index.js` are included and tested. Add Vercel KV
+> for durable storage (see the Vercel section above). The same `server.js` also runs as a
+> standalone process for local/VPS/Docker.
 
 ## Notes
 
