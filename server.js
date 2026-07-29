@@ -35,6 +35,8 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'genadmin-2026';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'genadmin-2026';
 const ADMIN_SESSION_TTL = 12 * 3600 * 1000; // 12 hours
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DIST_DIR = path.join(__dirname, 'dist');
+const STATIC_DIR = fs.existsSync(path.join(DIST_DIR, 'index.html')) ? DIST_DIR : PUBLIC_DIR;
 const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MAX_BODY = 256 * 1024; // 256 KiB cap on request bodies
@@ -692,17 +694,32 @@ function httpsJSON(url, payload, key) {
 function serveStatic(req, res) {
   let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (rel === '/') rel = '/index.html';
-  const filePath = path.join(PUBLIC_DIR, path.normalize(rel));
-  if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden');
+  const normalizedRel = path.normalize(rel);
+  const filePath = path.join(STATIC_DIR, normalizedRel);
+  if (!filePath.startsWith(STATIC_DIR)) return send(res, 403, 'Forbidden');
+  const ext = path.extname(filePath).toLowerCase();
+  const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
+
   fs.readFile(filePath, (err, data) => {
-    if (err) {
-      return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, d2) =>
-        e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
-      );
+    if (!err) return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+
+    // Vite production build fingerprints assets into /dist/assets/*. Keep legacy
+    // direct paths working (e.g. /app.js, /styles.css, /logo.svg) by falling
+    // back to the original public files when a dist file is not found.
+    if (STATIC_DIR === DIST_DIR) {
+      const fallback = path.join(PUBLIC_DIR, normalizedRel);
+      if (!fallback.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden');
+      return fs.readFile(fallback, (err2, data2) => {
+        if (!err2) return send(res, 200, data2, { 'Content-Type': MIME[path.extname(fallback).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache });
+        return fs.readFile(path.join(STATIC_DIR, 'index.html'), (e2, d2) =>
+          e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
+        );
+      });
     }
-    const ext = path.extname(filePath).toLowerCase();
-    const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
-    send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+
+    return fs.readFile(path.join(STATIC_DIR, 'index.html'), (e2, d2) =>
+      e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
+    );
   });
 }
 
