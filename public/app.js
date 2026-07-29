@@ -2135,17 +2135,11 @@ function applyMobileEnv() {
   const ua = navigator.userAgent || '';
   const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (ios) root.classList.add('ios');
-  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
   if (standalone) root.classList.add('standalone');
-  const setVh = () => {
-    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    root.style.setProperty('--vh', `${h * 0.01}px`);
-    root.style.setProperty('--app-vh', `${h}px`);
-  };
-  setVh();
-  window.addEventListener('resize', setVh, { passive: true });
-  window.addEventListener('orientationchange', setVh, { passive: true });
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', setVh, { passive: true });
+  // Do NOT bind height to visualViewport — that shrinks when the iOS keyboard
+  // opens and leaves the white gap under the tab bar. Shell stays full-screen;
+  // only the scroll regions move.
 }
 // Optional deep link: #stats|calc|hub|ai|agent|plans|settings|alerts|revenue
 function applyHash() {

@@ -47,13 +47,12 @@
 
   --shadow-frame: 0 34px 78px rgba(67, 88, 176, 0.28), 0 0 0 1px rgba(120, 138, 209, 0.18);
 
-  /* iOS safe areas + dynamic viewport (set --vh in JS on resize) */
+  /* iOS safe areas (MIXED-style). Cap bottom so home-indicator padding stays compact. */
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b-raw: env(safe-area-inset-bottom, 0px);
-  --safe-b: clamp(0px, var(--safe-b-raw), 16px);
-  --app-vh: 100vh;
+  --safe-b: min(var(--safe-b-raw), 12px);
   --top-chrome: calc(var(--safe-t) + 12px);
 }
 
@@ -97,13 +96,17 @@
 
 * { box-sizing: border-box; }
 
-html, body {
-  margin: 0;
+/* Same zoom/gesture lock as MIXED — app stays at 1x and does not jump. */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   height: 100%;
+  height: -webkit-fill-available;
 }
 
-html {
-  height: -webkit-fill-available;
+html, body {
+  margin: 0;
 }
 
 body {
@@ -111,7 +114,6 @@ body {
   background: var(--desk);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,6 +123,14 @@ body {
   min-height: -webkit-fill-available;
   padding: 24px;
   overscroll-behavior: none;
+  overflow: hidden;
+}
+
+/* iOS Safari zooms when focused fields are < 16px. Force 16px on touch devices. */
+@media (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
 
 .mono { font-family: var(--mono); font-feature-settings: 'tnum' 1; }
@@ -157,10 +167,8 @@ body {
 /* ---- iPhone frame --------------------------------------------------------- */
 .device {
   width: min(392px, 100vw);
-  height: min(848px, var(--app-vh));
   height: min(848px, 100vh);
   height: min(848px, 100dvh);
-  height: min(848px, calc(var(--vh, 1vh) * 100));
   border-radius: 44px;
   background: var(--device-bg);
   box-shadow: var(--shadow-frame);
@@ -188,18 +196,31 @@ body {
   position: absolute; inset: 0; border-radius: 48px; overflow: hidden;
 }
 
-/* On small screens the app fills the window (no frame chrome) */
+/* Mobile + installed PWA: pin shell to the real viewport (no visualViewport shrink). */
 @media (max-width: 460px) {
-  body { padding: 0; align-items: stretch; }
-  .stage { gap: 0; width: 100%; max-width: 100%; }
-  .device {
+  body {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    background: var(--device-bg);
+  }
+  .stage {
+    gap: 0;
     width: 100%;
-    max-width: 100%;
-    height: var(--app-vh);
-    height: 100vh;
+    max-width: none;
+    height: 100%;
+  }
+  .device {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
     height: 100dvh;
-    height: calc(var(--vh, 1vh) * 100);
-    border-radius: 0; box-shadow: none;
+    height: -webkit-fill-available;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
   }
   .device .island { display: none; }
   .viewport { border-radius: 0; }
@@ -208,8 +229,6 @@ body {
   .pad { padding-top: calc(var(--top-chrome) + 44px); }
   .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
   .appbar { padding-top: calc(var(--top-chrome) + 44px); }
-  /* Prevent iOS Safari auto-zoom when focusing form fields. */
-  input, textarea, select { font-size: 16px !important; }
 }
 
 /* ---- Screen scaffold ------------------------------------------------------ */
@@ -336,7 +355,7 @@ body {
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .field input, .field textarea, .field select {
-  width: 100%; font-family: inherit; font-size: 14px; color: var(--ink);
+  width: 100%; font-family: inherit; font-size: 16px; color: var(--ink);
   background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
   padding: 13px 14px; outline: none; transition: border-color 0.15s ease;
 }
@@ -380,13 +399,11 @@ body {
   display: flex; justify-content: space-around; align-items: center;
   flex-shrink: 0;
   padding: 6px 8px calc(8px + var(--safe-b));
-  min-height: calc(54px + var(--safe-b));
+  min-height: calc(50px + var(--safe-b));
   padding-left: calc(8px + var(--safe-l));
   padding-right: calc(8px + var(--safe-r));
-  background: color-mix(in oklab, var(--surface) 88%, #ffffff 12%);
+  background: var(--surface);
   border-top: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 .tabbar button {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -405,18 +422,26 @@ body {
   .tabbar button svg { width: 18px; height: 18px; }
 }
 
-/* Installed PWA — full viewport, no phone chrome, compact tab bar */
+/* Installed PWA / iOS home screen — same full-bleed shell as small screens */
 @media (display-mode: standalone) {
-  body { padding: 0; align-items: stretch; }
-  .stage { gap: 0; width: 100%; max-width: 100%; }
+  body {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    background: var(--device-bg);
+  }
+  .stage { gap: 0; width: 100%; max-width: none; height: 100%; }
   .device {
+    position: fixed;
+    inset: 0;
     width: 100%;
-    max-width: 100%;
-    height: var(--app-vh);
-    height: 100vh;
+    max-width: none;
+    height: 100%;
     height: 100dvh;
-    height: calc(var(--vh, 1vh) * 100);
-    border-radius: 0; box-shadow: none; border: none;
+    height: -webkit-fill-available;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
   }
   .device .island,
   .device .home-indicator,
@@ -426,33 +451,40 @@ body {
   .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
   .appbar { padding-top: calc(var(--top-chrome) + 44px); }
   .tabbar {
-    --safe-b: clamp(0px, var(--safe-b-raw), 12px);
     padding: 4px 6px calc(6px + var(--safe-b));
     padding-left: calc(6px + var(--safe-l));
     padding-right: calc(6px + var(--safe-r));
     min-height: calc(48px + var(--safe-b));
   }
   .tabbar button svg { width: 18px; height: 18px; }
-  input, textarea, select { font-size: 16px !important; }
 }
 
-/* iOS Safari / installed home-screen app */
-html.ios .device,
+/* iOS Safari home-screen (navigator.standalone) — same pin as display-mode */
+html.ios.standalone body {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  background: var(--device-bg);
+}
 html.ios.standalone .device {
+  position: fixed;
+  inset: 0;
   width: 100%;
-  max-width: 100%;
+  max-width: none;
+  height: 100%;
+  height: 100dvh;
+  height: -webkit-fill-available;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
 }
-html.ios .tabbar {
-  --safe-b: clamp(0px, var(--safe-b-raw), 12px);
-}
+html.ios.standalone .device .island,
+html.ios.standalone .device .home-indicator,
+html.ios.standalone .device .statusbar { display: none; }
+html.ios.standalone .viewport { border-radius: 0; }
 html.ios.standalone .pad,
-html.ios.standalone .pad-top,
-html.ios.standalone .appbar {
-  padding-top: calc(var(--top-chrome) + 44px);
-}
-html.ios.standalone .pad-top {
-  padding-top: calc(var(--top-chrome) + 48px);
-}
+html.ios.standalone .appbar { padding-top: calc(var(--top-chrome) + 44px); }
+html.ios.standalone .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
 
 /* AI forecast / dark insight card */
 .insight-actions { display: flex; gap: 8px; margin-top: 11px; }
