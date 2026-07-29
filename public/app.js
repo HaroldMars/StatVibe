@@ -21,6 +21,7 @@ const state = {
   models: { engines: [], cloud: [], ollamaOnline: false, active: new Set(), blend: true, loaded: false },
   plan: 'Free',
   usage: { used: 780, limit: 1000, resetDays: 9 },
+  statsDraft: { revenue: '', products: '', avgPrice: '' },
   aiPrefill: '',
   lastAIOutput: null,
   alerts: null,          // set on first render
@@ -73,6 +74,30 @@ function currency() {
   return (state.session.currencies || []).find((c) => c.code === code) || { code, symbol: '$', dp: 2 };
 }
 const money = (n) => { const c = currency(); return c.symbol + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: c.dp, maximumFractionDigits: c.dp }); };
+const statNum = (v) => {
+  const n = Number(String(v || '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+const hasStatInputs = () => {
+  const s = state.statsDraft || {};
+  return statNum(s.revenue) > 0 && statNum(s.products) > 0 && statNum(s.avgPrice) > 0;
+};
+function loadStatsDraft() {
+  try {
+    const raw = localStorage.getItem('sv_stats_draft');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    state.statsDraft = {
+      revenue: parsed.revenue || '',
+      products: parsed.products || '',
+      avgPrice: parsed.avgPrice || '',
+    };
+  } catch { /* ignore */ }
+}
+function saveStatsDraft() {
+  try { localStorage.setItem('sv_stats_draft', JSON.stringify(state.statsDraft)); } catch { /* ignore */ }
+}
 const bizName = () => (state.session.account && state.session.account.businessName) || 'My Business';
 const userName = () => (state.session.user && state.session.user.name) || 'Guest';
 const initials = (name) => (name || '').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '·';
@@ -422,46 +447,68 @@ const tabScreens = {};
 
 function statsCard() {
   const inv = state.session.inventory || [];
-  const hasData = inv.length > 0;
-  if (!hasData) {
+  const s = state.statsDraft || {};
+  const revenue = statNum(s.revenue);
+  const products = statNum(s.products);
+  const avgPrice = statNum(s.avgPrice);
+  const hasManual = hasStatInputs();
+  if (!hasManual) {
     return `
     <div class="card mb-12" style="text-align:center;padding:28px 20px">
       <div style="font-size:36px;margin-bottom:10px">📊</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:6px">No business data yet</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Add products in the <b>Calculator → Supply</b> tab, and your dashboard will populate with real stats based on your inventory and sales data.</div>
-      <button class="btn" data-tab="calc">Go to Calculator</button>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Enter your key stats first (revenue, products sold, and average price). StatVibe will compute and chart your dashboard after all inputs are complete.</div>
+      <div class="field" style="text-align:left;margin-bottom:8px"><label>Revenue (MTD)</label><input id="statsRevenue" inputmode="decimal" placeholder="e.g. 1840000" value="${esc(s.revenue || '')}" /></div>
+      <div class="field" style="text-align:left;margin-bottom:8px"><label>Products sold (MTD)</label><input id="statsProducts" inputmode="decimal" placeholder="e.g. 4207" value="${esc(s.products || '')}" /></div>
+      <div class="field" style="text-align:left;margin-bottom:16px"><label>Average price</label><input id="statsAvgPrice" inputmode="decimal" placeholder="e.g. 117.38" value="${esc(s.avgPrice || '')}" /></div>
+      <button class="btn" data-act="saveStatsInputs">Compute stats</button>
     </div>
     <div class="grid-3 mb-12">
       ${[['Revenue', money(0), '—', 'up'], ['Products', '0', '—', 'up'], ['Avg price', money(0), '—', 'up']]
         .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div><div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--muted-3)">${d}</div></div>`).join('')}
     </div>`;
   }
-  const totalValue = inv.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.stock) || 0), 0);
-  const avgPrice = inv.length ? inv.reduce((s, i) => s + (Number(i.price) || 0), 0) / inv.length : 0;
-  const totalStock = inv.reduce((s, i) => s + (Number(i.stock) || 0), 0);
+  const totalStock = products || inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
+  const totalValue = revenue;
+  const p1 = Math.round(revenue * 0.16);
+  const p2 = Math.round(revenue * 0.14);
+  const p3 = Math.round(revenue * 0.17);
+  const p4 = Math.round(revenue * 0.15);
+  const p5 = Math.round(revenue * 0.19);
+  const p6 = Math.round(revenue * 0.19);
+  const mx = Math.max(p1, p2, p3, p4, p5, p6) || 1;
+  const points = [p1, p2, p3, p4, p5, p6].map((v, i) => `${i * 60},${92 - ((v / mx) * 72)}`);
+  const first = points[0].split(',');
+  const last = points[points.length - 1].split(',');
+  const area = `M${first[0]},92 L${points.join(' L')} L${last[0]},92 Z`;
   return `
     <div class="card mb-12" style="padding:16px 16px 14px;cursor:pointer" data-act="goto" data-s="revenue">
       <div class="row-between mb-8">
-        <div class="eyebrow">Inventory value</div>
+        <div class="eyebrow">Revenue · MTD</div>
       </div>
       <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px">
         <div class="big-num" style="font-size:34px">${money(totalValue)}</div>
       </div>
-      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:6px">${inv.length} product${inv.length > 1 ? 's' : ''} · ${totalStock.toLocaleString()} total units</div>
+      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:6px">${totalStock.toLocaleString()} products sold · Avg ${money(avgPrice)}</div>
+      <svg viewBox="0 0 300 100" width="100%" height="92" preserveAspectRatio="none">
+        <defs><linearGradient id="svStatsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5865f2" stop-opacity=".22"/><stop offset="1" stop-color="#5865f2" stop-opacity="0"/></linearGradient></defs>
+        <path d="${area}" fill="url(#svStatsFill)"/>
+        <path d="M${points.join(' L')}" fill="none" stroke="#5865f2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
     </div>
     <div class="grid-3 mb-12">
-      ${[['Products', String(inv.length), '', 'up'], ['Total stock', totalStock.toLocaleString(), '', 'up'], ['Avg price', money(avgPrice), '', 'up']]
+      ${[['Revenue', money(revenue), '', 'up'], ['Products', totalStock.toLocaleString(), '', 'up'], ['Avg price', money(avgPrice), '', 'up']]
         .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div>${d ? `<div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--teal)">${d}</div>` : ''}</div>`).join('')}
     </div>
     <div class="card dark mb-12" style="padding:14px 15px">
       <div class="flex items-center" style="gap:7px;margin-bottom:8px">
         ${I.spark('#7FE3C8', 15, true)}
-        <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Inventory summary</span>
+        <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Stats insight</span>
       </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">You have <b style="color:#fff">${inv.length} product${inv.length > 1 ? 's' : ''}</b> worth <b style="color:#fff">${money(totalValue)}</b>. Go to Calculator → Supply to add rates and get AI depletion predictions.</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>.</div>
       <div class="insight-actions">
-        <button class="btn sm mint" data-tab="calc">Open Calculator</button>
-        <button class="btn sm" data-act="askAI" data-q="Give me an inventory health summary based on ${inv.length} products worth ${money(totalValue)}." style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
+        <button class="btn sm mint" data-act="editStatsInputs">Edit stats</button>
+        <button class="btn sm" data-act="askAI" data-q="Analyze my stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Give me 3 actions to grow next month." style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
       </div>
     </div>`;
 }
@@ -1207,6 +1254,35 @@ function bindClicks(root) {
 
       case 'applyPlan': toast('Forecast applied to your plan ✓'); break;
       case 'askAI': state.aiPrefill = t.dataset.q || ''; go('ai'); break;
+      case 'saveStatsInputs': {
+        state.statsDraft.revenue = ((document.getElementById('statsRevenue') || {}).value || '').trim();
+        state.statsDraft.products = ((document.getElementById('statsProducts') || {}).value || '').trim();
+        state.statsDraft.avgPrice = ((document.getElementById('statsAvgPrice') || {}).value || '').trim();
+        if (!hasStatInputs()) { toast('Enter revenue, products, and avg price'); break; }
+        saveStatsDraft();
+        render();
+        toast('Stats computed');
+        break;
+      }
+      case 'editStatsInputs': {
+        openSheet(`<h3>Edit statistics inputs</h3>
+          <div class="field" style="margin-top:12px"><label>Revenue (MTD)</label><input id="statsRevenueEdit" inputmode="decimal" value="${esc(state.statsDraft.revenue || '')}" /></div>
+          <div class="field"><label>Products sold (MTD)</label><input id="statsProductsEdit" inputmode="decimal" value="${esc(state.statsDraft.products || '')}" /></div>
+          <div class="field"><label>Average price</label><input id="statsAvgPriceEdit" inputmode="decimal" value="${esc(state.statsDraft.avgPrice || '')}" /></div>
+          <button class="btn" data-act="saveStatsInputsEdit">Save</button>`);
+        break;
+      }
+      case 'saveStatsInputsEdit': {
+        state.statsDraft.revenue = ((document.getElementById('statsRevenueEdit') || {}).value || '').trim();
+        state.statsDraft.products = ((document.getElementById('statsProductsEdit') || {}).value || '').trim();
+        state.statsDraft.avgPrice = ((document.getElementById('statsAvgPriceEdit') || {}).value || '').trim();
+        if (!hasStatInputs()) { toast('Enter revenue, products, and avg price'); break; }
+        saveStatsDraft();
+        closeSheet();
+        render();
+        toast('Stats updated');
+        break;
+      }
 
       // calculator
       case 'calcReset': state.calc = { tab: state.calc.tab, unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 }; render(); toast('Reset to SKU defaults'); break;
@@ -2018,6 +2094,7 @@ function applyHash() {
 async function boot() {
   try { const th = localStorage.getItem(STORAGE.THEME); if (th) state.settings.appearance = th; } catch { /* ignore */ }
   applyTheme();
+  loadStatsDraft();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.settings.appearance === 'System') applyTheme(); });
   try {
     const m = await (await fetch('/api/meta')).json();
