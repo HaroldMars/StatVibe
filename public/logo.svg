@@ -1,34 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="StatVibe logo">
   <defs>
-    <!-- diagonal pastel gradient: sage green (top-left) → soft pink (bottom-right) -->
-    <linearGradient id="sv-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#b7d9bf"/>
-      <stop offset="0.32" stop-color="#d7e6d8"/>
-      <stop offset="0.5" stop-color="#eef0ec"/>
-      <stop offset="0.68" stop-color="#ecd7e4"/>
-      <stop offset="1" stop-color="#e7c2da"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6e7bff"/>
+      <stop offset="1" stop-color="#5865f2"/>
     </linearGradient>
-    <filter id="sv-shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="2.5" stdDeviation="3" flood-color="#000000" flood-opacity="0.16"/>
+    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b5f0ff"/>
+      <stop offset="1" stop-color="#8fdcff"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1f2b63" flood-opacity="0.35"/>
     </filter>
-    <clipPath id="sv-tile"><rect x="2" y="2" width="96" height="96" rx="24"/></clipPath>
   </defs>
 
-  <!-- white rounded app tile -->
-  <rect x="2" y="2" width="96" height="96" rx="24" fill="#ffffff"/>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#bg)"/>
+  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="rgba(255,255,255,0.32)"/>
 
-  <!-- four-point concave sparkle, points reaching to the corners -->
-  <g clip-path="url(#sv-tile)">
-    <g transform="rotate(45 50 50)" filter="url(#sv-shadow)">
-      <path fill="url(#sv-grad)" d="
-        M50 2
-        C 52.5 38, 62 47.5, 98 50
-        C 62 52.5, 52.5 62, 50 98
-        C 47.5 62, 38 52.5, 2 50
-        C 38 47.5, 47.5 38, 50 2 Z"/>
-    </g>
+  <!-- friendly badge shape -->
+  <g filter="url(#soft)">
+    <path d="M50 22C34 22 22 34 22 50s12 28 28 28 28-12 28-28S66 22 50 22Z" fill="#ffffff"/>
   </g>
 
-  <!-- hairline edge to sit cleanly on light backgrounds -->
-  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="rgba(17,20,24,0.10)"/>
+  <!-- analytics bars -->
+  <rect x="35" y="52" width="7" height="13" rx="3.5" fill="#5f6cf5"/>
+  <rect x="46.5" y="44" width="7" height="21" rx="3.5" fill="#5f6cf5"/>
+  <rect x="58" y="37" width="7" height="28" rx="3.5" fill="#5f6cf5"/>
+
+  <!-- vibe spark -->
+  <path fill="url(#accent)" d="M68 30l2.3 6.2 6.2 2.3-6.2 2.3L68 47l-2.3-6.2-6.2-2.3 6.2-2.3z"/>
 </svg>
