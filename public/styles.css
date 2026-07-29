@@ -47,12 +47,11 @@
 
   --shadow-frame: 0 34px 78px rgba(67, 88, 176, 0.28), 0 0 0 1px rgba(120, 138, 209, 0.18);
 
-  /* iOS safe areas (MIXED-style). Cap bottom so home-indicator padding stays compact. */
+  /* iOS safe areas — keep bottom inset tiny so the tab bar has no white footer */
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
-  --safe-b-raw: env(safe-area-inset-bottom, 0px);
-  --safe-b: min(var(--safe-b-raw), 12px);
+  --safe-b: 0px;
   --top-chrome: calc(var(--safe-t) + 12px);
 }
 
@@ -102,16 +101,19 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   height: 100%;
-  height: -webkit-fill-available;
+  background: var(--bg);
 }
 
 html, body {
   margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 body {
   font-family: var(--sans);
-  background: var(--desk);
+  background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   display: flex;
@@ -120,10 +122,8 @@ body {
   min-height: 100%;
   min-height: 100vh;
   min-height: 100dvh;
-  min-height: -webkit-fill-available;
   padding: 24px;
   overscroll-behavior: none;
-  overflow: hidden;
 }
 
 /* iOS Safari zooms when focused fields are < 16px. Force 16px on touch devices. */
@@ -196,13 +196,16 @@ body {
   position: absolute; inset: 0; border-radius: 48px; overflow: hidden;
 }
 
-/* Mobile + installed PWA: pin shell to the real viewport (no visualViewport shrink). */
+/* Mobile + installed PWA: pin shell edge-to-edge (inset only — no height override). */
 @media (max-width: 460px) {
+  html, body {
+    height: 100%;
+    background: var(--bg);
+  }
   body {
     padding: 0;
-    align-items: stretch;
-    justify-content: stretch;
-    background: var(--device-bg);
+    display: block;
+    min-height: 100%;
   }
   .stage {
     gap: 0;
@@ -210,22 +213,29 @@ body {
     max-width: none;
     height: 100%;
   }
+  .stage-copy { display: none !important; }
   .device {
     position: fixed;
-    inset: 0;
-    width: 100%;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
     max-width: none;
-    height: 100%;
-    height: 100dvh;
-    height: -webkit-fill-available;
+    height: auto;
     border-radius: 0;
     box-shadow: none;
     border: none;
+    background: var(--bg);
   }
-  .device .island { display: none; }
-  .viewport { border-radius: 0; }
-  .device .home-indicator { display: none; }
-  .device .statusbar { display: none; }
+  .device .island,
+  .device .home-indicator,
+  .device .statusbar { display: none !important; }
+  .viewport {
+    border-radius: 0;
+    position: absolute;
+    inset: 0;
+  }
   .pad { padding-top: calc(var(--top-chrome) + 44px); }
   .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
   .appbar { padding-top: calc(var(--top-chrome) + 44px); }
@@ -235,8 +245,9 @@ body {
 .screen {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  max-height: 100%;
   background:
     radial-gradient(900px 500px at 5% -20%, rgba(139, 167, 255, 0.32), transparent 60%),
     radial-gradient(700px 500px at 95% 0%, rgba(164, 199, 255, 0.28), transparent 58%),
@@ -398,11 +409,11 @@ body {
 .tabbar {
   display: flex; justify-content: space-around; align-items: center;
   flex-shrink: 0;
-  padding: 6px 8px calc(8px + var(--safe-b));
-  min-height: calc(50px + var(--safe-b));
+  margin: 0;
+  padding: 8px 8px 10px;
   padding-left: calc(8px + var(--safe-l));
   padding-right: calc(8px + var(--safe-r));
-  background: var(--surface);
+  background: var(--bg);
   border-top: 1px solid var(--line);
 }
 .tabbar button {
@@ -417,71 +428,51 @@ body {
 .tabbar button svg { display: block; width: 19px; height: 19px; }
 
 @media (max-width: 380px) {
-  .tabbar { padding-top: 5px; }
+  .tabbar { padding-top: 6px; padding-bottom: 8px; }
   .tabbar button { font-size: 8.5px; }
   .tabbar button svg { width: 18px; height: 18px; }
 }
 
 /* Installed PWA / iOS home screen — same full-bleed shell as small screens */
 @media (display-mode: standalone) {
-  body {
-    padding: 0;
-    align-items: stretch;
-    justify-content: stretch;
-    background: var(--device-bg);
-  }
+  html, body { height: 100%; background: var(--bg); }
+  body { padding: 0; display: block; min-height: 100%; }
   .stage { gap: 0; width: 100%; max-width: none; height: 100%; }
+  .stage-copy { display: none !important; }
   .device {
     position: fixed;
-    inset: 0;
-    width: 100%;
-    max-width: none;
-    height: 100%;
-    height: 100dvh;
-    height: -webkit-fill-available;
-    border-radius: 0;
-    box-shadow: none;
-    border: none;
+    top: 0; right: 0; bottom: 0; left: 0;
+    width: auto; max-width: none; height: auto;
+    border-radius: 0; box-shadow: none; border: none;
+    background: var(--bg);
   }
   .device .island,
   .device .home-indicator,
-  .device .statusbar { display: none; }
-  .viewport { border-radius: 0; }
+  .device .statusbar { display: none !important; }
+  .viewport { border-radius: 0; position: absolute; inset: 0; }
   .pad { padding-top: calc(var(--top-chrome) + 44px); }
   .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
   .appbar { padding-top: calc(var(--top-chrome) + 44px); }
-  .tabbar {
-    padding: 4px 6px calc(6px + var(--safe-b));
-    padding-left: calc(6px + var(--safe-l));
-    padding-right: calc(6px + var(--safe-r));
-    min-height: calc(48px + var(--safe-b));
-  }
-  .tabbar button svg { width: 18px; height: 18px; }
+  .tabbar { padding: 8px 6px 10px; }
 }
 
-/* iOS Safari home-screen (navigator.standalone) — same pin as display-mode */
+/* iOS Safari home-screen (navigator.standalone) */
 html.ios.standalone body {
   padding: 0;
-  align-items: stretch;
-  justify-content: stretch;
-  background: var(--device-bg);
+  display: block;
+  background: var(--bg);
 }
 html.ios.standalone .device {
   position: fixed;
-  inset: 0;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  height: 100dvh;
-  height: -webkit-fill-available;
-  border-radius: 0;
-  box-shadow: none;
-  border: none;
+  top: 0; right: 0; bottom: 0; left: 0;
+  width: auto; max-width: none; height: auto;
+  border-radius: 0; box-shadow: none; border: none;
+  background: var(--bg);
 }
 html.ios.standalone .device .island,
 html.ios.standalone .device .home-indicator,
-html.ios.standalone .device .statusbar { display: none; }
-html.ios.standalone .viewport { border-radius: 0; }
+html.ios.standalone .device .statusbar { display: none !important; }
+html.ios.standalone .viewport { border-radius: 0; position: absolute; inset: 0; }
 html.ios.standalone .pad,
 html.ios.standalone .appbar { padding-top: calc(var(--top-chrome) + 44px); }
 html.ios.standalone .pad-top { padding-top: calc(var(--top-chrome) + 48px); }
