@@ -36,7 +36,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'genadmin-2026';
 const ADMIN_SESSION_TTL = 12 * 3600 * 1000; // 12 hours
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DIST_DIR = path.join(__dirname, 'dist');
-const STATIC_DIR = fs.existsSync(path.join(DIST_DIR, 'index.html')) ? DIST_DIR : PUBLIC_DIR;
+// Dev serves live source from public/; production serves the built dist/.
+// (On Vercel, static is served by @vercel/static-build → dist; this only
+// affects the standalone `node server.js`.)
+const STATIC_DIR = (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(DIST_DIR, 'index.html'))) ? DIST_DIR : PUBLIC_DIR;
 const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MAX_BODY = 256 * 1024; // 256 KiB cap on request bodies
@@ -101,6 +104,8 @@ const CURRENCIES = [
 ];
 const CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
 const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 days
+let _lastTs = 0;
+function monotonicNow() { const t = Date.now(); _lastTs = t > _lastTs ? t : _lastTs + 1; return _lastTs; }
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -662,6 +667,68 @@ async function handleAIHistory(req, res, sub, body) {
   return sendJSON(res, 404, { error: 'Unknown ai endpoint' });
 }
 
+// --- Messaging (real cross-user chat; contacts added by StatVibe QR/tag) ----
+async function convSummary(conv, uid) {
+  const otherId = conv.participants.find((id) => id !== uid);
+  const other = otherId ? await store.getUserById(otherId) : null;
+  const msgs = await store.listMessages(conv.id);
+  const readAt = (conv.read && conv.read[uid]) || 0;
+  const unread = msgs.filter((m) => m.from !== uid && m.at > readAt).length;
+  return {
+    id: conv.id,
+    other: other ? { id: other.id, name: other.name || 'StatVibe user', tag: other.tag, isGuest: !!other.isGuest } : { name: 'Unknown', tag: '' },
+    lastText: conv.lastText || '', lastAt: conv.lastAt || conv.createdAt, lastSender: conv.lastSender || null,
+    mine: conv.lastSender === uid, unread,
+  };
+}
+
+async function handleConversations(req, res, sub, body) {
+  const authed = await getAuthUser(req);
+  if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  const { user } = authed;
+  const parts = sub.split('/').filter(Boolean); // [] | [id] | [id,'messages'|'read']
+
+  if (parts.length === 0) {
+    if (req.method === 'GET') {
+      const convs = await store.getConversationsFor(user.id);
+      const list = (await Promise.all(convs.map((c) => convSummary(c, user.id)))).sort((a, b) => b.lastAt - a.lastAt);
+      return sendJSON(res, 200, { conversations: list, unreadTotal: list.reduce((n, c) => n + c.unread, 0) });
+    }
+    if (req.method === 'POST') {
+      const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+      const tag = String(b.tag || '').trim().toUpperCase().replace(/^STATVIBE:/, '').replace(/^USER:/, '').trim();
+      if (!tag) return sendJSON(res, 400, { error: 'Enter or scan a StatVibe code' });
+      const target = await store.getUserByTag(tag);
+      if (!target) return sendJSON(res, 404, { error: 'No StatVibe user has that code' });
+      if (target.id === user.id) return sendJSON(res, 400, { error: "That's your own code — share it so others can message you" });
+      let conv = await store.findConversation(user.id, target.id);
+      if (!conv) { conv = { id: auth.newId('conv'), participants: [user.id, target.id], createdAt: Date.now(), read: {} }; await store.saveConversation(conv); }
+      return sendJSON(res, 200, { conversation: await convSummary(conv, user.id) });
+    }
+    return sendJSON(res, 405, { error: 'Method not allowed' });
+  }
+
+  const conv = await store.getConversation(parts[0]);
+  if (!conv || !conv.participants.includes(user.id)) return sendJSON(res, 404, { error: 'Conversation not found' });
+
+  if (parts[1] === 'messages') {
+    if (req.method === 'GET') {
+      await store.markConversationRead(conv.id, user.id);
+      return sendJSON(res, 200, { messages: await store.listMessages(conv.id), other: (await convSummary(conv, user.id)).other });
+    }
+    if (req.method === 'POST') {
+      const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+      const text = String(b.text || '').trim();
+      if (!text) return sendJSON(res, 400, { error: 'Message is empty' });
+      const msg = await store.addMessage(conv.id, { id: auth.newId('m'), from: user.id, text: text.slice(0, 4000), at: monotonicNow() });
+      await store.markConversationRead(conv.id, user.id);
+      return sendJSON(res, 201, { message: msg });
+    }
+  }
+  if (parts[1] === 'read' && req.method === 'POST') { await store.markConversationRead(conv.id, user.id); return sendJSON(res, 200, { ok: true }); }
+  return sendJSON(res, 404, { error: 'Unknown conversation endpoint' });
+}
+
 // --- PayMongo (real when PAYMONGO_SECRET_KEY is set) -----------------------
 async function handlePay(req, res, sub, body) {
   const authed = await getAuthUser(req);
@@ -742,6 +809,7 @@ async function requestHandler(req, res) {
     if (p === '/api/predict' && req.method === 'POST') return handlePredict(req, res, await readBody(req));
     if (p === '/api/ideas' || p.startsWith('/api/ideas/')) return handleIdeas(req, res, p === '/api/ideas' ? '' : p.slice('/api/ideas/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p.startsWith('/api/ai/')) return handleAIHistory(req, res, p.slice('/api/ai/'.length), ['POST'].includes(req.method) ? await readBody(req) : null);
+    if (p === '/api/conversations' || p.startsWith('/api/conversations/')) return handleConversations(req, res, p === '/api/conversations' ? '' : p.slice('/api/conversations'.length), ['POST', 'PATCH'].includes(req.method) ? await readBody(req) : null);
     if (p.startsWith('/api/pay/')) return handlePay(req, res, p.slice('/api/pay/'.length), req.method === 'POST' ? await readBody(req) : null);
     if (p.startsWith('/api/admin/')) return handleAdmin(req, res, p.slice('/api/admin/'.length), req.method === 'POST' ? await readBody(req) : null);
     if (p.startsWith('/api/')) return sendJSON(res, 404, { error: 'Unknown endpoint' });

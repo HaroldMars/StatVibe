@@ -8,6 +8,10 @@ process.env.PORT = process.env.TEST_PORT || '4199';
 process.env.HOST = '127.0.0.1';
 process.env.OLLAMA_HOST = 'http://127.0.0.1:9'; // unused → fast fallback
 process.env.ADMIN_TOKEN = 'test-token';
+// Force the simulated engine (disable hosted AI + KV) so tests are deterministic
+// regardless of what's in the developer's .env.
+process.env.AI_API_URL = ''; process.env.AI_API_KEY = '';
+process.env.KV_REST_API_URL = ''; process.env.KV_REST_API_TOKEN = '';
 // Isolate the database so tests never touch the dev data/db.json.
 const os = require('node:os');
 const pathMod = require('node:path');
@@ -368,4 +372,49 @@ test('paymongo QR: clear "not configured" when no key set', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.configured, false);
   assert.match(r.json.message, /PayMongo/);
+});
+
+// --- Real cross-user messaging (Agent) ---
+test('two users message each other via StatVibe code, inbox + unread work', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'msga@test.co', password: 'password1', name: 'Msg A', acceptedTerms: true } });
+  const B = await req('POST', '/api/auth/register', { body: { email: 'msgb@test.co', password: 'password1', name: 'Msg B', acceptedTerms: true } });
+  const at = A.json.token, bt = B.json.token, bTag = B.json.user.tag;
+
+  // A adds B by code (as if scanning B's QR)
+  const conv = await req('POST', '/api/conversations', { headers: auth(at), body: { tag: 'statvibe:' + bTag } });
+  assert.equal(conv.status, 200);
+  const cid = conv.json.conversation.id;
+  assert.equal(conv.json.conversation.other.name, 'Msg B');
+
+  // A sends
+  assert.equal((await req('POST', '/api/conversations/' + cid + '/messages', { headers: auth(at), body: { text: 'Hello B' } })).status, 201);
+
+  // B sees it in the inbox as unread
+  const bInbox = await req('GET', '/api/conversations', { headers: auth(bt) });
+  assert.equal(bInbox.json.conversations.length, 1);
+  assert.equal(bInbox.json.conversations[0].unread, 1);
+  assert.equal(bInbox.json.unreadTotal, 1);
+  assert.equal(bInbox.json.conversations[0].lastText, 'Hello B');
+
+  // B opens the thread (marks read) and replies
+  const msgs = await req('GET', '/api/conversations/' + cid + '/messages', { headers: auth(bt) });
+  assert.equal(msgs.json.messages.length, 1);
+  assert.equal(msgs.json.other.name, 'Msg A');
+  await req('POST', '/api/conversations/' + cid + '/messages', { headers: auth(bt), body: { text: 'Yes we do!' } });
+  assert.equal((await req('GET', '/api/conversations', { headers: auth(bt) })).json.unreadTotal, 0);
+
+  // A now has an unread reply
+  assert.equal((await req('GET', '/api/conversations', { headers: auth(at) })).json.conversations[0].unread, 1);
+});
+
+test('cannot start a conversation with your own code', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'self@test.co', password: 'password1', name: 'Self', acceptedTerms: true } });
+  const r = await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: A.json.user.tag } });
+  assert.equal(r.status, 400);
+});
+
+test('unknown code → 404; conversation endpoints require auth', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'u404@test.co', password: 'password1', name: 'U', acceptedTerms: true } });
+  assert.equal((await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: 'SV-NOPEXX' } })).status, 404);
+  assert.equal((await req('GET', '/api/conversations')).status, 401);
 });

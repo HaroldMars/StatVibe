@@ -178,6 +178,8 @@ body {
   .viewport { border-radius: 0; }
   .device .home-indicator { display: none; }
   .device .statusbar { display: none; }
+  /* Prevent iOS Safari auto-zoom when focusing form fields. */
+  input, textarea, select { font-size: 16px !important; }
 }
 
 /* ---- Screen scaffold ------------------------------------------------------ */

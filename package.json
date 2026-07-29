@@ -11,11 +11,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "NODE_ENV=production node server.js",
     "dev": "vite",
     "dev:server": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
+    "release:check": "npm run build && npm test",
     "test": "node --test test/*.test.js",
     "smoke": "node test/smoke.mjs"
   },

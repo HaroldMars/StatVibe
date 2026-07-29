@@ -10,7 +10,7 @@
 /* ----------------------------------------------------------------------- */
 const state = {
   authed: false,
-  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], agentAutoReply: false, currencies: [], loaded: false },
+  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], conversations: [], unreadTotal: 0, agentAutoReply: false, currencies: [], loaded: false },
   tab: 'stats',
   stack: [],            // sub-screen history: [{screen, params}]
   period: 'Month',
@@ -28,13 +28,8 @@ const state = {
   profile: { name: 'Jordan Doyle', email: 'jordan@illuminarypeak.co', role: 'Owner', phone: '+1 (555) 018-2245', tz: 'Pacific Time · PT' },
   workspace: 'Illuminary Peak',
   admin: { authed: false, token: null, summary: null, busy: false, testOut: null, user: 'GenAdmin' },
-  agent: {
-    thread: [
-      { who: 'them', text: 'Hi — can you confirm the wholesale price on the Trailhead Jacket for a 500-unit order? Need it for a PO today.', time: '9:14 AM' },
-    ],
-    draft: null,
-    unread: 1,
-  },
+  // Real messaging: conversations live in state.session; the open thread here.
+  chat: { convId: null, other: null, messages: [], draft: null, drafting: false },
 };
 
 /* ----------------------------------------------------------------------- */
@@ -199,7 +194,8 @@ document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
 /* ----------------------------------------------------------------------- */
 /* Router                                                                   */
 /* ----------------------------------------------------------------------- */
-function go(tab) { if (tab === 'agent' && state.agent) state.agent.unread = 0; state.tab = tab; state.stack = []; render(); }
+function currentScreen() { return state.stack.length ? state.stack[state.stack.length - 1].screen : state.tab; }
+function go(tab) { state.tab = tab; state.stack = []; render(); if (tab === 'agent') loadConversations().then(() => { if (state.tab === 'agent' && !state.stack.length) render(); }); }
 function push(screen, params = {}) { state.stack.push({ screen, params }); render(); }
 function back() { state.stack.pop(); render(); }
 
@@ -236,7 +232,7 @@ function tabbar(active) {
       ${badge ? `<span style="position:absolute;top:-2px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box">${badge > 9 ? '9+' : badge}</span>` : ''}
       ${icon(active === id ? '#0E7C66' : '#9AA0A8')}<span>${label}</span>
     </button>`;
-  const unread = (state.agent && state.agent.unread) || 0;
+  const unread = (state.session && state.session.unreadTotal) || 0;
   return `<div class="tabbar">
     ${item('stats', 'Stats', I.bars)}
     ${item('calc', 'Calc', I.calc)}
@@ -372,6 +368,52 @@ screens.setup = () => {
 /* ----------------------------------------------------------------------- */
 const tabScreens = {};
 
+function statsCard() {
+  const inv = state.session.inventory || [];
+  const hasData = inv.length > 0;
+  if (!hasData) {
+    return `
+    <div class="card mb-12" style="text-align:center;padding:28px 20px">
+      <div style="font-size:36px;margin-bottom:10px">📊</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">No business data yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Add products in the <b>Calculator → Supply</b> tab, and your dashboard will populate with real stats based on your inventory and sales data.</div>
+      <button class="btn" data-tab="calc">Go to Calculator</button>
+    </div>
+    <div class="grid-3 mb-12">
+      ${[['Revenue', money(0), '—', 'up'], ['Products', '0', '—', 'up'], ['Avg price', money(0), '—', 'up']]
+        .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div><div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--muted-3)">${d}</div></div>`).join('')}
+    </div>`;
+  }
+  const totalValue = inv.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.stock) || 0), 0);
+  const avgPrice = inv.length ? inv.reduce((s, i) => s + (Number(i.price) || 0), 0) / inv.length : 0;
+  const totalStock = inv.reduce((s, i) => s + (Number(i.stock) || 0), 0);
+  return `
+    <div class="card mb-12" style="padding:16px 16px 14px;cursor:pointer" data-act="goto" data-s="revenue">
+      <div class="row-between mb-8">
+        <div class="eyebrow">Inventory value</div>
+      </div>
+      <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px">
+        <div class="big-num" style="font-size:34px">${money(totalValue)}</div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:6px">${inv.length} product${inv.length > 1 ? 's' : ''} · ${totalStock.toLocaleString()} total units</div>
+    </div>
+    <div class="grid-3 mb-12">
+      ${[['Products', String(inv.length), '', 'up'], ['Total stock', totalStock.toLocaleString(), '', 'up'], ['Avg price', money(avgPrice), '', 'up']]
+        .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div>${d ? `<div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--teal)">${d}</div>` : ''}</div>`).join('')}
+    </div>
+    <div class="card dark mb-12" style="padding:14px 15px">
+      <div class="flex items-center" style="gap:7px;margin-bottom:8px">
+        ${I.spark('#7FE3C8', 15, true)}
+        <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Inventory summary</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">You have <b style="color:#fff">${inv.length} product${inv.length > 1 ? 's' : ''}</b> worth <b style="color:#fff">${money(totalValue)}</b>. Go to Calculator → Supply to add rates and get AI depletion predictions.</div>
+      <div class="insight-actions">
+        <button class="btn sm mint" data-tab="calc">Open Calculator</button>
+        <button class="btn sm" data-act="askAI" data-q="Give me an inventory health summary based on ${inv.length} products worth ${money(totalValue)}." style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
+      </div>
+    </div>`;
+}
+
 tabScreens.stats = () => `
   <div class="scroll pad-top" style="padding-left:18px;padding-right:18px;padding-bottom:14px">
     <div class="row-between mb-20" style="padding-top:0">
@@ -389,50 +431,7 @@ tabScreens.stats = () => `
       </div>
     </div>
 
-    <div class="card mb-12" style="padding:16px 16px 6px;cursor:pointer" data-act="goto" data-s="revenue">
-      <div class="row-between mb-8">
-        <div class="eyebrow">Revenue · MTD</div>
-        <div style="font-size:11px;color:var(--muted-2)" class="flex gap-10"><span style="color:var(--teal);font-weight:600">● Actual</span><span>◌ Forecast</span></div>
-      </div>
-      <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px">
-        <div class="big-num" style="font-size:34px">$1.84M</div>
-        <div class="delta up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 16l6-6 4 4 6-8" stroke="#0E7C66" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>12.4%</div>
-      </div>
-      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:6px">vs $1.64M last month · Plan $1.79M</div>
-      <svg viewBox="0 0 322 100" width="100%" height="98" preserveAspectRatio="none">
-        <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E7C66" stop-opacity=".18"/><stop offset="1" stop-color="#0E7C66" stop-opacity="0"/></linearGradient></defs>
-        <path d="M0,72 L26,68 L52,74 L78,56 L104,60 L130,46 L156,52 L182,36 L208,42 L234,30 L250,26 L250,100 L0,100 Z" fill="url(#ga)"/>
-        <path d="M0,72 L26,68 L52,74 L78,56 L104,60 L130,46 L156,52 L182,36 L208,42 L234,30 L250,26" fill="none" stroke="#0E7C66" stroke-width="2"/>
-        <path d="M250,26 L286,17 L322,9" fill="none" stroke="#0E7C66" stroke-width="2" stroke-dasharray="2 4" stroke-opacity=".55"/>
-        <circle cx="250" cy="26" r="3" fill="#0E7C66"/>
-      </svg>
-    </div>
-
-    <div class="grid-3 mb-12">
-      ${[['Gross margin', '61.2%', '+2.1 pt', 'up'], ['Customers', '4,207', '+318', 'up'], ['Runway', '14.2<span style="font-size:11px;color:var(--muted-2)">mo</span>', '−0.4', 'down']]
-        .map(([k, v, d, dir]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div><div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--${dir === 'up' ? 'teal' : 'red'})">${d}</div></div>`).join('')}
-    </div>
-
-    <div class="card dark mb-12" style="padding:14px 15px">
-      <div class="flex items-center" style="gap:7px;margin-bottom:8px">
-        ${I.spark('#7FE3C8', 15, true)}
-        <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Predictive insight</span>
-        <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--mint)">92% conf.</span>
-      </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">On track to close the month at <b style="color:#fff">$2.41M</b> (+6.8% over plan). Trim Channel B ad spend ~9% to hold gross margin above 60%.</div>
-      <div class="insight-actions">
-        <button class="btn sm mint" data-act="applyPlan">Apply to plan</button>
-        <button class="btn sm" data-act="askAI" data-q="Explain the Channel B ad-spend recommendation and quantify the margin impact." style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row-between mb-12"><div style="font-size:13px;font-weight:600">Revenue by channel</div><div style="font-size:11px;color:var(--muted-2)">30 days</div></div>
-      <div class="stack gap-11">
-        ${[['Direct', 42, '#0E7C66'], ['Marketplace', 28, '#3AA88C'], ['Wholesale', 19, '#8FCBBB'], ['Referral', 11, '#C3E0D6']]
-          .map(([n, p, c]) => `<div><div class="row-between" style="font-size:12px;margin-bottom:4px"><span>${n}</span><span class="mono" style="color:var(--muted)">${p}%</span></div><div class="meter"><i style="width:${p}%;background:${c}"></i></div></div>`).join('')}
-      </div>
-    </div>
+    ${statsCard()}
   </div>
   ${tabbar('stats')}`;
 
@@ -459,7 +458,7 @@ tabScreens.calc = () => {
     <div class="card mb-12">
       <div style="font-size:12px;color:var(--muted-2);margin-bottom:10px">Trailhead Jacket · SKU TH-402</div>
       ${[['Unit cost', 'unitCost'], ['Freight + duty', 'freight'], ['Overhead allocation', 'overhead']]
-        .map(([lab, key]) => `<div class="row-between" style="padding:9px 0;border-bottom:1px solid var(--hairline)"><span style="font-size:13px">${lab}</span><span class="flex items-center" style="gap:2px"><span class="mono" style="font-size:14px">$</span><input class="mono calc-input" data-k="${key}" value="${c[key].toFixed(2)}" inputmode="decimal" style="width:64px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/></span></div>`).join('')}
+        .map(([lab, key]) => `<div class="row-between" style="padding:9px 0;border-bottom:1px solid var(--hairline)"><span style="font-size:13px">${lab}</span><span class="flex items-center" style="gap:2px"><span class="mono" style="font-size:14px">${esc(currency().symbol)}</span><input class="mono calc-input" data-k="${key}" value="${c[key].toFixed(2)}" inputmode="decimal" style="width:64px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/></span></div>`).join('')}
       <div class="row-between" style="padding:11px 0 2px"><span style="font-size:13px">Target markup</span><span class="flex items-center" style="gap:2px"><input class="mono calc-input" data-k="markup" value="${c.markup}" inputmode="decimal" style="width:44px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/><span class="mono" style="font-size:14px">%</span></span></div>
     </div>
 
@@ -598,64 +597,117 @@ tabScreens.ai = () => {
 };
 
 /* ----------------------------------------------------------------------- */
-/* Tab screen: AgentTech Assistant                                          */
+/* Tab screen: Agent — Messenger-style inbox (real cross-user messaging)     */
 /* ----------------------------------------------------------------------- */
+const AV_COLORS = ['#5865f2', '#0E7C66', '#3A6070', '#B26B00', '#8E44AD', '#C0392B', '#2E86AB'];
+function avatarColor(seed) { let h = 0; for (const c of String(seed || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
+function convAvatar(other, size = 52) {
+  const c = avatarColor(other.tag || other.name);
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${c};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size / 2.6)}px;flex-shrink:0">${esc(initials(other.name))}</div>`;
+}
+function relTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts), now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  const days = Math.floor((now - d) / 86400000);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return d.toLocaleDateString('en-US', { weekday: 'short' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 tabScreens.agent = () => {
-  const bubbles = state.agent.thread.map((msg) => {
-    if (msg.who === 'them') return `<div class="bubble them">${esc(msg.text)}</div>`;
-    if (msg.who === 'me') return `<div class="bubble me">${esc(msg.text)}</div>`;
-    if (msg.who === 'ai') return `<div class="bubble ai"><div class="ai-tag">${I.spark('#7FE3C8', 13, true)}AgentTech drafted</div><div style="font-size:13px;line-height:1.5;color:#F2ECE2">${esc(msg.text)}</div></div>`;
-    return '';
-  }).join('');
-  const draftControls = state.agent.draft
-    ? `<div class="approve-row"><button class="pill" data-act="approveSend" style="color:var(--teal);background:var(--teal-tint);border-color:#CDE6DD">Approve &amp; send</button><button class="pill" data-act="editDraft">Edit</button></div>`
-    : '';
-  const auto = state.session.agentAutoReply;
-  const empty = state.agent.thread.length === 0;
+  const convs = state.session.conversations || [];
+  const row = (c) => {
+    const preview = (c.mine ? 'You: ' : '') + (c.lastText || 'Say hello 👋');
+    const unread = c.unread > 0;
+    return `
+    <button class="conv-row" data-act="openChat" data-id="${c.id}">
+      ${convAvatar(c.other)}
+      <div style="flex:1;min-width:0">
+        <div class="row-between"><span style="font-size:15px;font-weight:${unread ? '700' : '600'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.other.name)}</span><span style="font-size:11.5px;color:${unread ? 'var(--teal)' : 'var(--muted-2)'};flex-shrink:0;margin-left:8px;font-weight:${unread ? '600' : '400'}">${relTime(c.lastAt)}</span></div>
+        <div class="row-between" style="margin-top:2px"><span style="font-size:13px;color:${unread ? 'var(--ink)' : 'var(--muted-2)'};font-weight:${unread ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(preview)}</span>${unread ? `<span class="conv-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}</div>
+      </div>
+    </button>`;
+  };
   return `
-  <div class="flex items-center" style="gap:11px;padding:54px 16px 12px;background:var(--surface);border-bottom:1px solid var(--line)">
-    <div style="width:38px;height:38px;border-radius:11px;background:var(--slate-blue-tint);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--slate-blue)">MR</div>
-    <div style="flex:1"><div style="font-size:14.5px;font-weight:600">Meridian Retail</div><div class="flex items-center" style="font-size:11px;color:var(--teal);gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:${auto ? '#0E7C66' : '#B26B00'};display:inline-block"></span>AgentTech · ${auto ? 'auto-reply on' : 'approval mode'}</div></div>
-    <button class="iconbtn plain" data-act="agentSettings" title="AgentTech settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#5C6169" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z" stroke="#5C6169" stroke-width="1.4"/></svg></button>
+  <div class="scroll pad" style="padding-top:54px">
+    <div class="row-between mb-14">
+      <div class="h-page">Messages</div>
+      <button class="iconbtn accent" data-act="newChat" title="New message">${I.plus('#fff')}</button>
+    </div>
+    ${convs.length
+      ? `<div class="stack" style="gap:2px">${convs.map(row).join('')}</div>`
+      : `<div class="card" style="text-align:center;padding:30px 20px;margin-top:20px">
+          <div style="width:64px;height:64px;border-radius:20px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:30px">💬</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px">No messages yet</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:18px">Messages appear when someone scans your StatVibe QR. Share your code, or start one by scanning theirs.</div>
+          <button class="btn" data-act="newChat" style="margin-bottom:10px">Start a message</button>
+          <button class="btn outline" data-act="myQR">Show my QR code</button>
+        </div>`}
+  </div>
+  ${tabbar('agent')}`;
+};
+
+/* ---- Chat thread (a single conversation) ---- */
+screens.chat = () => {
+  const t = state.chat;
+  const other = t.other || { name: 'Chat', tag: '' };
+  const me = state.session.user && state.session.user.id;
+  const auto = state.session.agentAutoReply;
+  const bubbles = (t.messages || []).map((m) => m.from === me
+    ? `<div class="bubble me">${esc(m.text)}</div>`
+    : `<div class="bubble them">${esc(m.text)}</div>`).join('');
+  const draftControls = t.draft
+    ? `<div class="approve-row"><button class="pill" data-act="approveSend" style="color:var(--teal);background:var(--teal-tint);border-color:var(--teal-tint-border)">Approve &amp; send</button><button class="pill" data-act="editDraft">Edit</button></div>`
+    : '';
+  return `
+  <div class="flex items-center" style="gap:11px;padding:54px 12px 12px;background:var(--surface);border-bottom:1px solid var(--line)">
+    <button class="iconbtn plain" data-act="back" style="background:none">${I.back}</button>
+    ${convAvatar(other, 36)}
+    <div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(other.name)}</div><div style="font-size:11px;color:var(--teal)"><span style="width:6px;height:6px;border-radius:50%;background:${auto ? 'var(--teal)' : 'var(--amber)'};display:inline-block;margin-right:5px"></span>AgentTech · ${auto ? 'auto-reply' : 'approval'}</div></div>
+    <button class="iconbtn plain" data-act="agentSettings" title="AgentTech settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z" stroke="currentColor" stroke-width="1.4"/></svg></button>
   </div>
   <div class="chat-scroll" id="chatScroll">
-    ${empty ? `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 24px;color:var(--muted-2)"><div style="font-size:34px;margin-bottom:10px">💬</div><div style="font-size:15px;font-weight:600;color:var(--ink)">No messages yet</div><div style="font-size:12.5px;line-height:1.5;margin-top:4px">When a client or partner messages you, it'll appear here. Share your StatVibe QR (Settings → Privacy) so people can reach you.</div></div>`
-      : `<div class="chat-time">Today · 9:14 AM</div>${bubbles}${draftControls}`}
+    ${(t.messages || []).length ? bubbles + draftControls : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 24px;color:var(--muted-2)"><div style="font-size:13px;line-height:1.5">This is the start of your conversation with <b style="color:var(--ink)">${esc(other.name)}</b>.</div></div>`}
   </div>
   <div class="composer">
     <div class="inputwrap">
-      <input id="agentInput" placeholder="Message or let AI reply…" />
+      <input id="agentInput" placeholder="Message…" />
       <button class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('#0E7C66', 12, true)} AI</button>
       <button class="send" data-act="agentSend">${I.send}</button>
     </div>
-  </div>
-  ${tabbar('agent')}`;
+  </div>`;
 };
 
 /* ----------------------------------------------------------------------- */
 /* Sub-screens                                                              */
 /* ----------------------------------------------------------------------- */
-screens.revenue = () => `
+screens.revenue = () => {
+  const inv = state.session.inventory || [];
+  const totalValue = inv.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.stock) || 0), 0);
+  const topProducts = inv.slice().sort((a, b) => ((Number(b.price) || 0) * (Number(b.stock) || 0)) - ((Number(a.price) || 0) * (Number(a.stock) || 0))).slice(0, 5);
+  return `
   ${appbar('Revenue', { right: `<button class="iconbtn" data-act="exportRevenue">${I.download}</button>` })}
   <div class="scroll" style="padding:8px 18px 20px">
-    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">$1.84M</div><div class="delta up">+12.4%</div></div>
-    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:14px">Month to date · vs $1.64M prior</div>
-    <div class="segmented mb-16" data-seg="period">
-      ${['Week', 'Month', 'Quarter', 'Year'].map((p) => `<button class="${state.period === p ? 'active' : ''}" data-v="${p}">${p}</button>`).join('')}
-    </div>
-    <div class="card mb-14" style="padding:16px 15px 12px">
-      <div class="bars">
-        ${[['Apr', 52], ['May', 64], ['Jun', 58], ['Jul', 80], ['Aug', 96, 'on'], ['Sep*', 112, 'forecast']]
-          .map(([m, h, cls]) => `<div class="b ${cls || ''}"><i style="height:${h}px"></i><span>${m}</span></div>`).join('')}
-      </div>
-      <div style="font-size:10.5px;color:var(--muted-2);margin-top:8px;text-align:right">* AI forecast</div>
-    </div>
-    <div class="eyebrow mb-10">Top products</div>
+    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">${money(totalValue)}</div></div>
+    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:14px">Total inventory value · ${inv.length} product${inv.length !== 1 ? 's' : ''}</div>
+    ${!inv.length ? `
+    <div class="card" style="text-align:center;padding:28px 20px">
+      <div style="font-size:36px;margin-bottom:10px">📈</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No revenue data yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add products and inventory to see your revenue breakdown here.</div>
+      <button class="btn" data-tab="calc">Add products</button>
+    </div>` : `
+    <div class="eyebrow mb-10">Top products by value</div>
     <div class="list">
-      ${[['Trailhead Jacket', '1,412 units', '$384K', '+18%', 'up'], ['Summit Pack 40L', '906 units', '$271K', '+9%', 'up'], ['Trail Runner GTX', '1,088 units', '$228K', '−3%', 'down']]
-        .map(([n, u, r, d, dir]) => `<div class="row" style="cursor:default"><div><div style="font-size:13px;font-weight:500">${n}</div><div style="font-size:11px;color:var(--muted-2)">${u}</div></div><div style="text-align:right"><div class="mono" style="font-size:13px;font-weight:500">${r}</div><div style="font-size:11px;font-weight:600;color:var(--${dir === 'up' ? 'teal' : 'red'})">${d}</div></div></div>`).join('')}
-    </div>
+      ${topProducts.map((it) => {
+        const val = (Number(it.price) || 0) * (Number(it.stock) || 0);
+        return `<div class="row" style="cursor:default"><div><div style="font-size:13px;font-weight:500">${esc(it.name)}</div><div style="font-size:11px;color:var(--muted-2)">${Number(it.stock).toLocaleString()} ${esc(it.unit || 'units')}</div></div><div style="text-align:right"><div class="mono" style="font-size:13px;font-weight:500">${money(val)}</div><div style="font-size:11px;color:var(--muted-2)">${money(it.price)} each</div></div></div>`;
+      }).join('')}
+    </div>`}
   </div>`;
+};
 
 screens.aiOutput = () => {
   const out = state.lastAIOutput || { title: 'Q3 Board Update', model: 'simulated', simulated: true, content: 'No output yet.', engines: [] };
@@ -1114,12 +1166,13 @@ function bindClicks(root) {
       case 'exportOutput': case 'exportRevenue': toast('Exported'); break;
       case 'outputMenu': openSheet(`<h3>${esc(state.lastAIOutput ? state.lastAIOutput.title : 'Document')}</h3><div class="list" style="margin-top:12px"><button class="row" data-close><span>Duplicate</span></button><button class="row" data-close><span>Share link</span></button><button class="row" data-close><span style="color:var(--red)">Delete</span></button></div>`); break;
 
-      // agent
+      // agent / messaging
+      case 'openChat': openChat(t.dataset.id); break;
+      case 'newChat': newChatSheet(); break;
       case 'agentDraft': agentDraft(); break;
       case 'agentSend': agentSend(); break;
       case 'approveSend': approveSend(); break;
-      case 'editDraft': { const draft = state.agent.draft; if (draft) { state.agent.thread = state.agent.thread.filter((m) => m.who !== 'ai'); state.agent.draft = null; render(); const inp = $('#agentInput'); if (inp) { inp.value = draft; inp.focus(); } } break; }
-      case 'call': toast('Calling Meridian Retail…'); break;
+      case 'editDraft': editDraft(); break;
       case 'agentSettings': agentSettingsSheet(); break;
 
       // plans
@@ -1138,6 +1191,7 @@ function bindClicks(root) {
       case 'activeSessions': toast('1 active session · this device'); break;
       case 'exportData': exportData(); break;
       case 'myQR': qrSheet(); break;
+      case 'copyTag': navigator.clipboard && navigator.clipboard.writeText(t.dataset.tag || '').then(() => toast('Code copied')); break;
       case 'paymentMethod': paymentSheet(); break;
       case 'deleteAccount': deleteAccountConfirm(); break;
       case 'editBusiness': editBusinessSheet(); break;
@@ -1321,79 +1375,147 @@ async function aivibe() {
   } catch { toast('AIVibe failed — try again'); }
 }
 
-/* ---- Agent actions ---- */
+/* ---- Messaging / Agent (real cross-user chat) ---- */
 function scrollChat() { const s = document.getElementById('chatScroll'); if (s) s.scrollTop = s.scrollHeight; }
 
-async function agentDraft() {
-  // Draft only once: if a suggestion already exists (or one is generating),
-  // it's up to the user to Edit/rephrase or Approve it — don't stack drafts.
-  if (state.agent.drafting) return;
-  if (state.agent.draft) { toast('You already have a draft — Edit or Approve it'); return; }
+async function loadConversations() {
+  const { status, data } = await api('/conversations');
+  if (status === 200) { state.session.conversations = data.conversations; state.session.unreadTotal = data.unreadTotal; }
+}
 
-  state.agent.drafting = true;
-  const scroll = document.getElementById('chatScroll');
-  if (scroll) {
-    const el = document.createElement('div');
-    el.className = 'bubble ai';
-    el.innerHTML = `<div class="ai-tag">${I.spark('#7FE3C8', 13, true)}AgentTech drafting</div><div class="typing" style="color:#7FE3C8"><i></i><i></i><i></i></div>`;
-    scroll.appendChild(el); scrollChat();
+async function openChat(convId) {
+  const conv = (state.session.conversations || []).find((c) => c.id === convId);
+  state.chat = { convId, other: conv ? conv.other : { name: 'Chat', tag: '' }, messages: [], draft: null, drafting: false };
+  push('chat');
+  const { status, data } = await api('/conversations/' + convId + '/messages');
+  if (status === 200) { state.chat.messages = data.messages; state.chat.other = data.other; }
+  loadConversations();
+  render(); scrollChat();
+}
+
+async function refreshChat() {
+  if (!state.chat.convId) return;
+  const { status, data } = await api('/conversations/' + state.chat.convId + '/messages');
+  if (status === 200 && data.messages.length !== state.chat.messages.length) {
+    state.chat.messages = data.messages; state.chat.other = data.other;
+    if (currentScreen() === 'chat') { render(); scrollChat(); }
   }
-  const lastThem = [...state.agent.thread].reverse().find((m) => m.who === 'them');
-  const prompt = `A wholesale client (Meridian Retail) wrote: "${lastThem ? lastThem.text : 'Can you confirm the wholesale price?'}". Draft a short, friendly, professional reply confirming pricing. Our wholesale price for the Trailhead Jacket is $58.80/unit for 500 units (40% off retail), which holds a 32% margin for the client. Offer to generate the quote and PO. Keep it under 60 words.`;
+}
+
+async function agentSend() {
+  const inp = $('#agentInput'); const txt = inp && inp.value.trim();
+  if (!txt || !state.chat.convId) return;
+  state.chat.draft = null;
+  const { status, data } = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text: txt } });
+  if (status === 201) { state.chat.messages.push(data.message); render(); scrollChat(); loadConversations(); }
+  else toast((data && data.error) || 'Could not send');
+}
+
+async function agentDraft() {
+  if (!state.chat.convId || state.chat.drafting) return;
+  if (state.chat.draft) { toast('You already have a draft — Edit or Approve it'); return; }
+  const me = state.session.user && state.session.user.id;
+  const lastTheirs = [...state.chat.messages].reverse().find((m) => m.from !== me);
+  state.chat.drafting = true;
+  const scroll = document.getElementById('chatScroll');
+  if (scroll) { const el = document.createElement('div'); el.className = 'bubble ai'; el.innerHTML = `<div class="ai-tag">${I.spark('#7FE3C8', 13, true)}AgentTech drafting</div><div class="typing" style="color:#7FE3C8"><i></i><i></i><i></i></div>`; scroll.appendChild(el); scrollChat(); }
+  const prompt = `You are messaging on behalf of the business "${bizName()}" to ${state.chat.other.name}. Their last message: "${lastTheirs ? lastTheirs.text : '(none yet — write a friendly opener)'}". Draft a short, warm, professional reply suited to their message. Under 55 words. No preamble.`;
   try {
-    const d = await callAI(prompt, 'You are AgentTech, a professional AI messaging assistant that drafts client replies for a business. Be warm, concise and specific.');
+    const d = await callAI(prompt, 'You are AgentTech, an AI messaging assistant that drafts replies to clients and partners for a business owner. Be concise, friendly and specific.');
     const text = d.content.trim();
     if (state.session.agentAutoReply) {
-      // Auto-reply mode: send immediately without approval.
-      state.agent.thread.push({ who: 'me', text });
-      state.agent.drafting = false; render(); scrollChat(); toast('AgentTech auto-replied ✓');
-      setTimeout(() => { state.agent.thread.push({ who: 'them', text: 'Perfect, thank you! 🙌' }); render(); scrollChat(); }, 1500);
-      return;
+      const r = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text } });
+      state.chat.drafting = false;
+      if (r.status === 201) { state.chat.messages.push(r.data.message); toast('AgentTech auto-replied ✓'); loadConversations(); }
+      render(); scrollChat(); return;
     }
-    state.agent.draft = text;
-    state.agent.thread.push({ who: 'ai', text });
-  } catch (e) {
-    toast('Could not draft reply');
-  } finally {
-    state.agent.drafting = false;
-    render(); scrollChat();
-  }
+    state.chat.draft = text;
+  } catch (e) { toast('Could not draft reply'); }
+  finally { state.chat.drafting = false; render(); scrollChat(); }
+}
+
+async function approveSend() {
+  if (!state.chat.draft || !state.chat.convId) return;
+  const text = state.chat.draft; state.chat.draft = null;
+  const { status, data } = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text } });
+  if (status === 201) { state.chat.messages.push(data.message); render(); scrollChat(); toast('Sent ✓'); loadConversations(); }
+}
+
+function editDraft() {
+  const d = state.chat.draft; if (!d) return;
+  state.chat.draft = null; render();
+  const inp = $('#agentInput'); if (inp) { inp.value = d; inp.focus(); }
 }
 
 function agentSettingsSheet() {
   const auto = state.session.agentAutoReply;
   openSheet(`<h3>AgentTech settings</h3>
     <div class="list" style="margin-top:12px">
-      <div class="row" style="cursor:default"><div><div style="font-size:13.5px">Auto-reply</div><div style="font-size:11.5px;color:var(--muted-2)">AI sends replies automatically</div></div><button class="toggle ${auto ? 'on' : ''}" data-a-auto></button></div>
+      <div class="row" style="cursor:default"><div><div style="font-size:13.5px">Auto-reply</div><div style="font-size:11.5px;color:var(--muted-2)">AI answers new messages automatically</div></div><button class="toggle ${auto ? 'on' : ''}" data-a-auto></button></div>
       <div class="row" style="cursor:default"><div><div style="font-size:13.5px">Approval mode</div><div style="font-size:11.5px;color:var(--muted-2)">You review each AI draft before it sends</div></div><span class="tagchip ${auto ? 'grey' : 'green'}">${auto ? 'off' : 'on'}</span></div>
     </div>
-    <div style="font-size:11px;color:var(--muted-3);margin-top:12px;line-height:1.5">In approval mode, the AI drafts a reply and waits for you to Approve or Edit. Turn on auto-reply to let AgentTech respond in real time.</div>
+    <div style="font-size:11px;color:var(--muted-3);margin-top:12px;line-height:1.5">Approval mode: AI drafts a reply and waits for Approve/Edit. Auto-reply: AgentTech responds in real time.</div>
     <button class="btn" data-close style="margin-top:14px">Done</button>`);
   setTimeout(() => { const b = document.querySelector('#sheet [data-a-auto]'); if (b) b.onclick = () => { state.session.agentAutoReply = !state.session.agentAutoReply; render(); agentSettingsSheet(); toast('Auto-reply ' + (state.session.agentAutoReply ? 'on' : 'off')); }; }, 30);
 }
 
-function agentSend() {
-  const inp = $('#agentInput');
-  const txt = inp && inp.value.trim();
-  if (!txt) return;                         // send is for typed messages only — no auto-suggest
-  // The user chose to write their own reply, so drop any pending AI draft.
-  state.agent.thread = state.agent.thread.filter((m) => m.who !== 'ai');
-  state.agent.draft = null;
-  state.agent.thread.push({ who: 'me', text: txt });
-  render(); scrollChat();
-  // simulate a client reply
-  setTimeout(() => { state.agent.thread.push({ who: 'them', text: 'Great, thanks! 🙌' }); render(); scrollChat(); }, 1400);
+// New message → add a contact by scanning/uploading their StatVibe QR or code.
+function newChatSheet() {
+  const canScan = 'BarcodeDetector' in window;
+  openSheet(`<h3>New message</h3>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Add someone by their StatVibe QR or code. They can message you the same way — from your QR.</div>
+    <div class="stack gap-10">
+      ${canScan ? `<button class="btn" data-a-scan>${I.spark('#fff', 13, true)} Scan QR with camera</button>` : ''}
+      <label class="btn outline" style="cursor:pointer;margin:0">Upload a QR image<input id="qrFile" type="file" accept="image/*" style="display:none" /></label>
+    </div>
+    <div class="flex items-center gap-12" style="margin:16px 0"><div style="flex:1;height:1px;background:var(--line-2)"></div><span style="font-size:11px;color:var(--muted-3)">or enter code</span><div style="flex:1;height:1px;background:var(--line-2)"></div></div>
+    <div class="field" style="margin-bottom:10px"><input id="tagInput" placeholder="SV-XXXXXX" style="text-transform:uppercase;font-family:var(--mono);letter-spacing:1px" /></div>
+    <button class="btn" data-a-tag>Start chat</button>
+    <div style="text-align:center;margin-top:12px"><b data-act="myQR" style="font-size:12.5px;color:var(--teal);cursor:pointer">Show my QR so others can reach me →</b></div>`);
+  setTimeout(() => {
+    const sh = document.getElementById('sheet');
+    const tagBtn = sh.querySelector('[data-a-tag]'); if (tagBtn) tagBtn.onclick = () => { const v = (document.getElementById('tagInput') || {}).value; if (v && v.trim()) startConversationByTag(v.trim()); else toast('Enter a StatVibe code'); };
+    const scanBtn = sh.querySelector('[data-a-scan]'); if (scanBtn) scanBtn.onclick = () => scanQRCamera();
+    const file = sh.querySelector('#qrFile'); if (file) file.onchange = (e) => decodeQRImage(e.target.files[0]);
+  }, 30);
 }
 
-function approveSend() {
-  if (!state.agent.draft) return;
-  const draft = state.agent.draft;
-  // convert the last AI bubble into a sent message
-  state.agent.thread = state.agent.thread.filter((m) => m.who !== 'ai');
-  state.agent.thread.push({ who: 'me', text: draft });
-  state.agent.draft = null;
-  render(); scrollChat(); toast('Sent to Meridian Retail ✓');
-  setTimeout(() => { state.agent.thread.push({ who: 'them', text: 'Perfect, send the PO 🙌' }); render(); scrollChat(); }, 1600);
+async function startConversationByTag(tag) {
+  const { status, data } = await api('/conversations', { method: 'POST', body: { tag } });
+  if (status === 200) { closeSheet(); await loadConversations(); openChat(data.conversation.id); }
+  else toast((data && data.error) || 'Could not start chat');
+}
+
+// Decode a QR from an uploaded image using the built-in BarcodeDetector.
+async function decodeQRImage(file) {
+  if (!file) return;
+  if (!('BarcodeDetector' in window)) { toast('Scanning not supported here — enter the code'); return; }
+  try {
+    const bmp = await createImageBitmap(file);
+    const codes = await new window.BarcodeDetector({ formats: ['qr_code'] }).detect(bmp);
+    if (codes.length) startConversationByTag(codes[0].rawValue);
+    else toast('No QR found in that image');
+  } catch (e) { toast('Could not read that image'); }
+}
+
+// Live camera QR scan (BarcodeDetector). Opens a small scanner overlay.
+async function scanQRCamera() {
+  if (!('BarcodeDetector' in window)) { toast('Camera scanning not supported here'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
+  catch { toast('Camera permission denied'); return; }
+  openSheet(`<h3>Scan a StatVibe QR</h3><video id="qrVid" autoplay playsinline muted style="width:100%;border-radius:14px;background:#000;margin-top:10px"></video><button class="btn outline" data-close style="margin-top:12px">Cancel</button>`);
+  const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+  setTimeout(async () => {
+    const vid = document.getElementById('qrVid'); if (!vid) { stream.getTracks().forEach((t) => t.stop()); return; }
+    vid.srcObject = stream;
+    const tick = async () => {
+      if (!document.getElementById('qrVid')) { stream.getTracks().forEach((t) => t.stop()); return; }
+      try { const codes = await det.detect(vid); if (codes.length) { stream.getTracks().forEach((t) => t.stop()); startConversationByTag(codes[0].rawValue); return; } } catch { /* keep scanning */ }
+      setTimeout(tick, 400);
+    };
+    tick();
+  }, 60);
 }
 
 /* ---- Admin / Developer ---- */
@@ -1653,16 +1775,109 @@ function qrPlaceholder(text, size = 150) {
   finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="#14171C"><rect width="${size}" height="${size}" fill="#fff"/>${rects}</svg>`;
 }
+/* ---- Real QR encoder (byte mode, ECC-L, versions 1–4, single block) ---- */
+const QR = (() => {
+  const EXP = new Array(512), LOG = new Array(256);
+  (function () { let x = 1; for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; })();
+  const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+  const DATA_CAP = { 1: 19, 2: 34, 3: 55, 4: 80 };   // byte-mode data codewords, ECC level L
+  const EC_CW = { 1: 7, 2: 10, 3: 15, 4: 20 };
+  const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26] };
+
+  function rsEncode(data, ec) {
+    let gen = [1];
+    for (let i = 0; i < ec; i++) { const g2 = new Array(gen.length + 1).fill(0); for (let j = 0; j < gen.length; j++) { g2[j] ^= gen[j]; g2[j + 1] ^= gmul(gen[j], EXP[i]); } gen = g2; }
+    const res = new Array(data.length + ec).fill(0);
+    for (let i = 0; i < data.length; i++) res[i] = data[i];
+    for (let i = 0; i < data.length; i++) { const c = res[i]; if (c) for (let j = 0; j < gen.length; j++) res[i + j] ^= gmul(gen[j], c); }
+    return res.slice(data.length);
+  }
+  function encode(text, version) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+    const bits = []; const push = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >> i) & 1); };
+    push(0b0100, 4); push(bytes.length, 8); bytes.forEach((b) => push(b, 8));
+    const cap = DATA_CAP[version] * 8;
+    for (let i = 0; i < 4 && bits.length < cap; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    const pads = [0xEC, 0x11]; let p = 0; while (bits.length < cap) { push(pads[p++ % 2], 8); }
+    const cw = []; for (let i = 0; i < bits.length; i += 8) { let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; cw.push(v); }
+    return cw.concat(rsEncode(cw, EC_CW[version]));
+  }
+  function modules(text) {
+    let version = 1; while (version < 4 && new TextEncoder().encode(text).length + 2 > DATA_CAP[version]) version++;
+    const size = 17 + 4 * version;
+    const m = Array.from({ length: size }, () => new Array(size).fill(null));
+    const fn = Array.from({ length: size }, () => new Array(size).fill(false)); // function-module mask
+    const set = (r, c, v) => { m[r][c] = v; fn[r][c] = true; };
+    const finder = (r, c) => { for (let i = -1; i <= 7; i++) for (let j = -1; j <= 7; j++) { const rr = r + i, cc = c + j; if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue; const on = i >= 0 && i <= 6 && j >= 0 && j <= 6 && (i === 0 || i === 6 || j === 0 || j === 6 || (i >= 2 && i <= 4 && j >= 2 && j <= 4)); set(rr, cc, on); } };
+    finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+    for (let i = 8; i < size - 8; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); } // timing
+    const ac = ALIGN[version];
+    for (const r of ac) for (const c of ac) { if ((r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8)) continue; for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) set(r + i, c + j, Math.max(Math.abs(i), Math.abs(j)) !== 1); }
+    set(size - 8, 8, true); // dark module
+    for (let i = 0; i < 9; i++) { if (!fn[8][i]) { m[8][i] = null; fn[8][i] = true; } if (!fn[i][8]) { m[i][8] = null; fn[i][8] = true; } } // reserve format
+    for (let i = 0; i < 8; i++) { fn[8][size - 1 - i] = true; fn[size - 1 - i][8] = true; }
+
+    const cw = encode(text, version); const bitsArr = []; cw.forEach((b) => { for (let i = 7; i >= 0; i--) bitsArr.push((b >> i) & 1); });
+    let bi = 0, up = true;
+    for (let col = size - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      for (let k = 0; k < size; k++) { const row = up ? size - 1 - k : k; for (let c = 0; c < 2; c++) { const cc = col - c; if (fn[row][cc]) continue; m[row][cc] = bi < bitsArr.length ? bitsArr[bi++] === 1 : false; } }
+      up = !up;
+    }
+    const maskFn = [(r, c) => (r + c) % 2 === 0, (r, c) => r % 2 === 0, (r, c) => c % 3 === 0, (r, c) => (r + c) % 3 === 0, (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0, (r, c) => ((r * c) % 2 + (r * c) % 3) === 0, (r, c) => (((r * c) % 2 + (r * c) % 3) % 2) === 0, (r, c) => (((r + c) % 2 + (r * c) % 3) % 2) === 0];
+    const fmtBits = (mask) => {
+      const data5 = (0b01 << 3) | mask;      // ECC level L = 01, then 3 mask bits
+      let d = data5 << 10;
+      for (let i = 14; i >= 10; i--) if ((d >> i) & 1) d ^= (0x537 << (i - 10)); // BCH(15,5)
+      return ((data5 << 10) | (d & 0x3FF)) ^ 0x5412;                            // + mask pattern
+    };
+    const applyFormat = (grid, mask) => {
+      const v = fmtBits(mask); const bit = (i) => (v >> i) & 1;
+      // Copy 1 — around the top-left finder (skips timing modules).
+      for (let i = 0; i <= 5; i++) grid[8][i] = bit(i);
+      grid[8][7] = bit(6); grid[8][8] = bit(7); grid[7][8] = bit(8);
+      for (let i = 9; i <= 14; i++) grid[14 - i][8] = bit(i);
+      // Copy 2 — split along the top-right row and bottom-left column.
+      for (let i = 0; i <= 7; i++) grid[size - 1 - i][8] = bit(i);
+      for (let i = 8; i <= 14; i++) grid[8][size - 15 + i] = bit(i);
+      grid[size - 8][8] = 1; // dark module
+    };
+    const penalty = (grid) => { let p = 0; for (let r = 0; r < size; r++) { let run = 1; for (let c = 1; c < size; c++) { if (grid[r][c] === grid[r][c - 1]) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } } for (let c = 0; c < size; c++) { let run = 1; for (let r = 1; r < size; r++) { if (grid[r][c] === grid[r - 1][c]) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } } for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++) if (grid[r][c] === grid[r][c + 1] && grid[r][c] === grid[r + 1][c] && grid[r][c] === grid[r + 1][c + 1]) p += 3; let dark = 0; for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (grid[r][c]) dark++; p += Math.floor(Math.abs(dark * 100 / (size * size) - 50) / 5) * 10; return p; };
+
+    let best = null, bestP = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+      const g = m.map((row) => row.slice());
+      for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!fn[r][c] && maskFn[mask](r, c)) g[r][c] = g[r][c] ? 0 : 1;
+      applyFormat(g, mask);
+      const gb = g.map((row) => row.map((x) => x === 1 || x === true));
+      const pen = penalty(gb);
+      if (pen < bestP) { bestP = pen; best = gb; }
+    }
+    return best;
+  }
+  function svg(text, size = 200, quiet = 4) {
+    const m = modules(text); const n = m.length; const total = n + quiet * 2; const cell = +(size / total).toFixed(3);
+    let rects = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (m[r][c]) rects += `<rect x="${((c + quiet) * cell).toFixed(2)}" y="${((r + quiet) * cell).toFixed(2)}" width="${cell}" height="${cell}"/>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
+  }
+  return { svg };
+})();
+window.QR = QR; // exposed for QR round-trip testing
+
 function qrSheet() {
   const u = state.session.user || {};
-  openSheet(`<h3>My StatVibe QR</h3>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Share this so a partner or client can add you in Agent. Others can't find you unless you share it.</div>
+  const tag = u.tag || '';
+  openSheet(`<h3>My StatVibe code</h3>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Share this code (or QR) so a partner or client can reach you in Agent → New message. Nobody can find you unless you share it.</div>
     <div style="text-align:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px">
-      ${qrPlaceholder('statvibe:user:' + (u.tag || 'guest'), 168)}
-      <div style="font-family:var(--mono);font-size:16px;font-weight:600;margin-top:12px;letter-spacing:1px">${esc(u.tag || '—')}</div>
-      <div style="font-size:11px;color:var(--muted-2);margin-top:2px">Your StatVibe tag${u.email ? ' · ' + esc(u.email) : ''}</div>
+      ${qrPlaceholder('statvibe:' + (tag || 'guest'), 168)}
+      <div style="font-family:var(--mono);font-size:22px;font-weight:600;margin-top:14px;letter-spacing:2px;color:#14171C">${esc(tag || '—')}</div>
+      <div style="font-size:11px;color:#8A9099;margin-top:3px">Your StatVibe code${u.email ? ' · ' + esc(u.email) : ''}</div>
     </div>
-    <button class="btn" data-close style="margin-top:14px">Done</button>`);
+    <button class="btn" data-act="copyTag" data-tag="${esc(tag)}" style="margin-top:12px">Copy my code</button>
+    <button class="btn outline" data-close style="margin-top:8px">Done</button>`);
 }
 async function paymentSheet() {
   const u = state.session.user || {};
@@ -1737,7 +1952,7 @@ async function boot() {
   if (tok) {
     state.session.token = tok;
     const { status, data } = await api('/auth/me');
-    if (status === 200) { applySession(data); if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory()]); } }
+    if (status === 200) { applySession(data); if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory(), loadConversations()]); } }
     else { try { localStorage.removeItem('sv_token'); } catch { /* ignore */ } state.session.token = null; }
   }
   state.session.loaded = true;
@@ -1747,6 +1962,14 @@ async function boot() {
 
 boot();
 window.addEventListener('hashchange', applyHash);
+
+// Light polling so new messages/conversations appear without a refresh.
+setInterval(() => {
+  if (!state.authed || !(state.session.account && state.session.account.setupComplete)) return;
+  const scr = currentScreen();
+  if (scr === 'chat') refreshChat();
+  else if (scr === 'agent') loadConversations().then(() => { if (currentScreen() === 'agent') render(); });
+}, 5000);
 
 // Register the service worker so StatVibe is installable on iOS/Android.
 if ('serviceWorker' in navigator) {
