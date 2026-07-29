@@ -107,6 +107,9 @@ const cloudinaryBase = () => {
 };
 function imgSrc(src, { w, h } = {}) {
   if (!src) return src;
+  // Keep same-origin static assets as direct paths so PWA/app icons and
+  // local branding images never depend on third-party fetch transforms.
+  if (src.startsWith('/')) return src;
   const base = cloudinaryBase();
   if (!base) return src;
   const full = src.startsWith('http://') || src.startsWith('https://') ? src : `${location.origin}${src.startsWith('/') ? '' : '/'}${src}`;

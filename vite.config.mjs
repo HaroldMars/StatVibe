@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { basename } from 'node:path';
 import path from 'node:path';
 import { defineConfig } from 'vite';
 
@@ -35,6 +36,14 @@ export default defineConfig({
       input: {
         main: path.resolve('public/index.html'),
         admin: path.resolve('public/admin.html'),
+      },
+      output: {
+        assetFileNames: (assetInfo) => {
+          const fixed = new Set(['logo-main.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'manifest.webmanifest']);
+          const nm = basename(assetInfo.name || '');
+          if (fixed.has(nm)) return '[name][extname]';
+          return 'assets/[name]-[hash][extname]';
+        },
       },
     },
   },
