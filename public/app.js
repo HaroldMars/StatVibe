@@ -369,7 +369,7 @@ const screens = {};
 screens.welcome = () => `
   <div class="scroll" style="padding:70px 22px 14px;display:flex;flex-direction:column">
     <div class="flex items-center" style="gap:9px;margin-bottom:auto">
-      <img src="${imgSrc('/logo.svg', { w: 96, h: 96 })}" alt="StatVibe" style="width:34px;height:34px;border-radius:9px" />
+      <img src="${imgSrc('/logo-main.png', { w: 96, h: 96 })}" alt="StatVibe" style="width:34px;height:34px;border-radius:9px" />
       <span style="font-size:17px;font-weight:700;letter-spacing:-.2px">StatVibe</span>
     </div>
     <div style="margin:28px 0 26px">
@@ -461,7 +461,7 @@ screens.setup = () => {
   return `
   <div class="scroll" style="padding:54px 22px 30px">
     <div class="flex items-center gap-10 mb-16">
-      <img src="${imgSrc('/logo.svg', { w: 80, h: 80 })}" alt="StatVibe" style="width:30px;height:30px;border-radius:8px" />
+      <img src="${imgSrc('/logo-main.png', { w: 80, h: 80 })}" alt="StatVibe" style="width:30px;height:30px;border-radius:8px" />
       <div><div style="font-size:12px;color:var(--muted-2)">Welcome${state.session.user && state.session.user.isGuest ? ', guest' : (state.session.user ? ', ' + esc(state.session.user.name.split(' ')[0]) : '')}</div><div style="font-size:11px;color:var(--teal);font-weight:600">Set up your business</div></div>
     </div>
     <div style="font-size:23px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px">Tell us about your business</div>

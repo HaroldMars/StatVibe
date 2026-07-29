@@ -1,7 +1,7 @@
 // StatVibe service worker — minimal app-shell cache so the app is installable
 // (PWA) on iOS/Android and loads offline. API calls always go to the network.
-const CACHE = 'statvibe-v6';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/logo.svg', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/manifest.webmanifest'];
+const CACHE = 'statvibe-v7';
+const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/logo-main.png', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
