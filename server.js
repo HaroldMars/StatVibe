@@ -35,6 +35,8 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'genadmin-2026';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'genadmin-2026';
 const ADMIN_SESSION_TTL = 12 * 3600 * 1000; // 12 hours
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DIST_DIR = path.join(__dirname, 'dist');
+const STATIC_DIR = fs.existsSync(path.join(DIST_DIR, 'index.html')) ? DIST_DIR : PUBLIC_DIR;
 const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MAX_BODY = 256 * 1024; // 256 KiB cap on request bodies
@@ -189,6 +191,33 @@ function simulate(messages) {
   return `Here's a quick take based on your business data:\n\n• Momentum is positive across your core metrics.\n• The biggest lever right now is protecting gross margin while you scale demand.\n• Suggested next step: run a short scenario forecast before committing budget.\n\n_(Simulated response — start Ollama or pull a model to get live AI output.)_`;
 }
 
+// --- Hosted LLM (OpenAI-compatible: Groq, OpenRouter, Together, OpenAI…) -----
+// Used automatically when Ollama isn't reachable (e.g. on Vercel) and AI_API_URL
+// + AI_API_KEY are set. Local dev keeps using Ollama.
+const AI_API_URL = process.env.AI_API_URL;   // e.g. https://api.groq.com/openai/v1/chat/completions
+const AI_API_KEY = process.env.AI_API_KEY;
+const AI_MODEL = process.env.AI_MODEL || 'llama-3.1-8b-instant';
+const hostedConfigured = () => !!(AI_API_URL && AI_API_KEY);
+async function callHostedAI(messages) {
+  const r = await fetch(AI_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI_API_KEY },
+    body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.7, stream: false }),
+  });
+  if (!r.ok) throw new Error('status ' + r.status + ' ' + (await r.text()).slice(0, 160));
+  const d = await r.json();
+  const content = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  return { model: AI_MODEL, content, usage: d.usage };
+}
+function recordUsage(model, usage, promptText, content) {
+  if (usage && (usage.prompt_tokens || usage.completion_tokens)) {
+    const p = usage.prompt_tokens || 0, c = usage.completion_tokens || 0;
+    metrics.tokens.total += p + c; metrics.tokens.prompt += p; metrics.tokens.completion += c;
+    const m = (metrics.tokens.byModel[model] ||= { prompt: 0, completion: 0, total: 0 });
+    m.prompt += p; m.completion += c; m.total += p + c;
+  } else { recordTokens(model, promptText, content); }
+}
+
 // --- API handlers ---------------------------------------------------------
 async function handleModels(res) {
   const local = config.simulateOnly ? [] : await listOllamaModels();
@@ -198,9 +227,11 @@ async function handleModels(res) {
   }));
   const engines = ollamaModels.length
     ? ollamaModels
-    : [{ id: 'simulated', label: 'Simulated', vendor: 'StatVibe demo', kind: 'local', available: true }];
+    : hostedConfigured()
+      ? [{ id: AI_MODEL, label: AI_MODEL, vendor: 'Hosted AI', kind: 'hosted', available: true }]
+      : [{ id: 'simulated', label: 'Simulated', vendor: 'StatVibe demo', kind: 'local', available: true }];
   const cloud = CLOUD_MODELS.map((c) => ({ ...c, kind: 'cloud', available: !!config.cloudAvailable[c.id] }));
-  sendJSON(res, 200, { ollama_online: ollamaModels.length > 0, simulate_only: config.simulateOnly, default_blend: config.defaultBlend, admin_user: ADMIN_USER, engines, cloud });
+  sendJSON(res, 200, { ollama_online: ollamaModels.length > 0, hosted: hostedConfigured(), simulate_only: config.simulateOnly, default_blend: config.defaultBlend, admin_user: ADMIN_USER, engines, cloud });
 }
 
 async function handleChat(res, body) {
@@ -229,7 +260,20 @@ async function handleChat(res, body) {
     model = local.find((m) => m === requested) || local.find((m) => m.split(':')[0] === requested);
   } else if (local.length) { model = local[0]; }
 
-  if (!model) { metrics.simulated++; return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages) }); }
+  if (!model) {
+    // No local Ollama model — use the hosted OpenAI-compatible API if configured
+    // (this is the production path on Vercel). Falls back to simulated on error.
+    if (hostedConfigured()) {
+      try {
+        const { model: hm, content, usage } = await callHostedAI(messages);
+        metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1;
+        recordUsage(hm, usage, promptText, content);
+        return sendJSON(res, 200, { simulated: false, model: hm, content });
+      } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
+    }
+    metrics.simulated++;
+    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages) });
+  }
 
   try {
     const { status, body: rb } = await ollamaRequest('POST', '/api/chat', {
@@ -258,7 +302,7 @@ function handleHealth(res) {
   return listOllamaModels().then((m) =>
     sendJSON(res, 200, {
       status: 'ok', version: VERSION, uptime_s: Math.round((Date.now() - START) / 1000),
-      ollama: { host: OLLAMA, online: m.length > 0, models: m }, simulate_only: config.simulateOnly, admin_user: ADMIN_USER,
+      ollama: { host: OLLAMA, online: m.length > 0, models: m }, hosted_ai: hostedConfigured(), simulate_only: config.simulateOnly, admin_user: ADMIN_USER,
     })
   );
 }
@@ -560,10 +604,19 @@ async function handlePredict(req, res, body) {
         ] });
       if (status === 200) { const parsed = JSON.parse(rb); const c = (parsed.message && parsed.message.content || '').trim(); if (c) { note = c; metrics.byModel[local[0]] = (metrics.byModel[local[0]] || 0) + 1; recordTokens(local[0], `${name} ${stock} ${rate} ${basis}`, c); } }
     } catch (e) { metrics.aiErrors++; log('warn', 'predict LLM: ' + e.message); }
+  } else if (hostedConfigured()) {
+    try {
+      metrics.chats++;
+      const { model: hm, content, usage } = await callHostedAI([
+        { role: 'system', content: 'You are StatVibe, a concise inventory analyst. Reply in ONE short sentence (max 30 words) with a practical reorder recommendation. No preamble.' },
+        { role: 'user', content: `Product "${name}": ${stock} ${item ? item.unit : 'units'} in stock, ${basis} rate ${rate}/day, so ~${days} days of cover (out ~${runoutDate}). Give a reorder recommendation.` },
+      ]);
+      if (content.trim()) { note = content.trim(); metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1; recordUsage(hm, usage, `${name} ${stock} ${rate} ${basis}`, content); }
+    } catch (e) { metrics.aiErrors++; log('warn', 'predict hosted AI: ' + e.message); }
   } else { metrics.simulated++; }
 
   const status = days <= 3 ? 'critical' : days <= 10 ? 'low' : 'healthy';
-  return sendJSON(res, 200, { days, human, runoutDate, status, rate, basis, ai: local.length > 0, note });
+  return sendJSON(res, 200, { days, human, runoutDate, status, rate, basis, ai: local.length > 0 || hostedConfigured(), note });
 }
 
 function handleMeta(res) { sendJSON(res, 200, { currencies: CURRENCIES }); }
@@ -641,22 +694,39 @@ function httpsJSON(url, payload, key) {
 function serveStatic(req, res) {
   let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (rel === '/') rel = '/index.html';
-  const filePath = path.join(PUBLIC_DIR, path.normalize(rel));
-  if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden');
+  const normalizedRel = path.normalize(rel);
+  const filePath = path.join(STATIC_DIR, normalizedRel);
+  if (!filePath.startsWith(STATIC_DIR)) return send(res, 403, 'Forbidden');
+  const ext = path.extname(filePath).toLowerCase();
+  const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
+
   fs.readFile(filePath, (err, data) => {
-    if (err) {
-      return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, d2) =>
-        e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
-      );
+    if (!err) return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+
+    // Vite production build fingerprints assets into /dist/assets/*. Keep legacy
+    // direct paths working (e.g. /app.js, /styles.css, /logo.svg) by falling
+    // back to the original public files when a dist file is not found.
+    if (STATIC_DIR === DIST_DIR) {
+      const fallback = path.join(PUBLIC_DIR, normalizedRel);
+      if (!fallback.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden');
+      return fs.readFile(fallback, (err2, data2) => {
+        if (!err2) return send(res, 200, data2, { 'Content-Type': MIME[path.extname(fallback).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache });
+        return fs.readFile(path.join(STATIC_DIR, 'index.html'), (e2, d2) =>
+          e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
+        );
+      });
     }
-    const ext = path.extname(filePath).toLowerCase();
-    const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
-    send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+
+    return fs.readFile(path.join(STATIC_DIR, 'index.html'), (e2, d2) =>
+      e2 ? send(res, 404, 'Not found') : send(res, 200, d2, { 'Content-Type': MIME['.html'] })
+    );
   });
 }
 
 // --- Router ---------------------------------------------------------------
-const server = http.createServer(async (req, res) => {
+// Exported so it can back both the standalone Node server (local/VPS/Docker)
+// and a Vercel serverless function (api/[...path].js) — same code, no rewrites.
+async function requestHandler(req, res) {
   metrics.requests++;
   try {
     const url = new URL(req.url, 'http://x');
@@ -684,23 +754,35 @@ const server = http.createServer(async (req, res) => {
     log('error', (req.method + ' ' + req.url + ' → ' + (e.message || e)));
     if (!res.headersSent) sendJSON(res, e.message === 'Body too large' ? 413 : 500, { error: e.message || 'Server error' });
   }
-});
+}
 
 // --- Boot / lifecycle -----------------------------------------------------
+// Runs once per process (and per Vercel cold start): load config + seed founder.
 loadConfig();
-seedFounder().catch((e) => log('error', 'seedFounder: ' + e.message));
-server.listen(PORT, HOST, () => {
-  log('info', `StatVibe v${VERSION} listening on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-  log('info', `Developer console: /admin  ·  founder: ${ADMIN_USER}`);
-  log('info', `Ollama proxy target: ${OLLAMA}`);
-  listOllamaModels().then((m) =>
-    log('info', m.length ? `Local models: ${m.join(', ')}` : 'No local models — simulated AI active.')
-  );
-});
-server.on('error', (e) => { log('error', 'server error: ' + e.message); process.exit(1); });
+const ready = seedFounder().catch((e) => log('error', 'seedFounder: ' + e.message));
 
-function shutdown(sig) { log('info', `${sig} received — shutting down`); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000); }
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+const server = http.createServer(requestHandler);
 
-module.exports = server; // for tests
+// Only listen when run directly (node server.js) — NOT when imported by the
+// Vercel serverless function, which calls requestHandler per request instead.
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    log('info', `StatVibe v${VERSION} listening on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+    log('info', `Developer console: /admin  ·  founder: ${ADMIN_USER}`);
+    log('info', `Ollama proxy target: ${OLLAMA}`);
+    listOllamaModels().then((m) =>
+      log('info', m.length ? `Local models: ${m.join(', ')}` : 'No local models — simulated AI active.')
+    );
+  });
+  server.on('error', (e) => { log('error', 'server error: ' + e.message); process.exit(1); });
+  const shutdown = (sig) => { log('info', `${sig} received — shutting down`); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000); };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+// Vercel serverless entry awaits `ready` (founder seed) then dispatches.
+async function handler(req, res) { await ready; return requestHandler(req, res); }
+
+module.exports = server;          // standalone server (also used by tests)
+module.exports.handler = handler; // serverless handler (api/[...path].js)
+module.exports.requestHandler = requestHandler;
