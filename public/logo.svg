@@ -7,16 +7,7 @@
   </defs>
 
   <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#bg)"/>
-  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="#ffffff" stroke-opacity="0.32"/>
+  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="#ffffff" stroke-opacity="0.25"/>
 
-  <!-- Pet-style paw mark -->
-  <ellipse cx="39" cy="36" rx="7" ry="8.5" fill="#ffffff"/>
-  <ellipse cx="50" cy="31" rx="7.2" ry="9" fill="#ffffff"/>
-  <ellipse cx="61" cy="36" rx="7" ry="8.5" fill="#ffffff"/>
-  <path d="M50 43c-13 0-22 8-22 17 0 8 6 13 13 13 3 0 6-1 9-3 3 2 6 3 9 3 7 0 13-5 13-13 0-9-9-17-22-17z" fill="#ffffff"/>
-
-  <!-- Tiny analytics bars inside pad -->
-  <rect x="41" y="53" width="4.5" height="10" rx="2.2" fill="#5f6cf5"/>
-  <rect x="48" y="49" width="4.5" height="14" rx="2.2" fill="#5f6cf5"/>
-  <rect x="55" y="45" width="4.5" height="18" rx="2.2" fill="#5f6cf5"/>
+  <text x="50" y="72" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="62" fill="#ffffff" letter-spacing="-2">S</text>
 </svg>
