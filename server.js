@@ -106,6 +106,7 @@ const CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
 const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 days
 let _lastTs = 0;
 function monotonicNow() { const t = Date.now(); _lastTs = t > _lastTs ? t : _lastTs + 1; return _lastTs; }
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -123,7 +124,7 @@ const SECURITY_HEADERS = {
     "default-src 'self'; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
-    "img-src 'self' data:; " +
+    "img-src 'self' data: https://res.cloudinary.com; " +
     "script-src 'self'; " +
     "connect-src 'self'; " +
     "worker-src 'self'; " +
@@ -624,7 +625,12 @@ async function handlePredict(req, res, body) {
   return sendJSON(res, 200, { days, human, runoutDate, status, rate, basis, ai: local.length > 0 || hostedConfigured(), note });
 }
 
-function handleMeta(res) { sendJSON(res, 200, { currencies: CURRENCIES }); }
+function handleMeta(res) {
+  sendJSON(res, 200, {
+    currencies: CURRENCIES,
+    cloudinary: CLOUDINARY_CLOUD_NAME ? { enabled: true, cloudName: CLOUDINARY_CLOUD_NAME } : { enabled: false, cloudName: null },
+  });
+}
 
 // --- Idea Hub -------------------------------------------------------------
 async function handleIdeas(req, res, sub, body) {

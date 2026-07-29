@@ -10,7 +10,7 @@
 /* ----------------------------------------------------------------------- */
 const state = {
   authed: false,
-  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], conversations: [], unreadTotal: 0, agentAutoReply: false, currencies: [], loaded: false },
+  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], conversations: [], unreadTotal: 0, agentAutoReply: false, currencies: [], cloudinary: null, loaded: false },
   tab: 'stats',
   stack: [],            // sub-screen history: [{screen, params}]
   period: 'Month',
@@ -25,6 +25,7 @@ const state = {
   lastAIOutput: null,
   alerts: null,          // set on first render
   settings: { blend: true, appearance: 'System', notifications: true },
+  auth: { remember: true },
   profile: { name: 'Jordan Doyle', email: 'jordan@illuminarypeak.co', role: 'Owner', phone: '+1 (555) 018-2245', tz: 'Pacific Time · PT' },
   workspace: 'Illuminary Peak',
   admin: { authed: false, token: null, summary: null, busy: false, testOut: null, user: 'GenAdmin' },
@@ -75,6 +76,40 @@ const money = (n) => { const c = currency(); return c.symbol + Number(n || 0).to
 const bizName = () => (state.session.account && state.session.account.businessName) || 'My Business';
 const userName = () => (state.session.user && state.session.user.name) || 'Guest';
 const initials = (name) => (name || '').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '·';
+const cloudinaryBase = () => {
+  const c = state.session.cloudinary;
+  return c && c.enabled && c.cloudName ? `https://res.cloudinary.com/${c.cloudName}/image/fetch` : null;
+};
+function imgSrc(src, { w, h } = {}) {
+  if (!src) return src;
+  const base = cloudinaryBase();
+  if (!base) return src;
+  const full = src.startsWith('http://') || src.startsWith('https://') ? src : `${location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
+  const tr = [`f_auto`, `q_auto`, `c_limit`];
+  if (w) tr.push(`w_${Math.round(w)}`);
+  if (h) tr.push(`h_${Math.round(h)}`);
+  return `${base}/${tr.join(',')}/${encodeURIComponent(full)}`;
+}
+const STORAGE = { REMEMBER: 'sv_remember', LOCAL_TOKEN: 'sv_token', SESSION_TOKEN: 'sv_session_token', THEME: 'sv_theme' };
+function persistToken(token, remember) {
+  try {
+    if (remember) {
+      localStorage.setItem(STORAGE.LOCAL_TOKEN, token);
+      localStorage.setItem(STORAGE.REMEMBER, '1');
+      sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
+    } else {
+      sessionStorage.setItem(STORAGE.SESSION_TOKEN, token);
+      localStorage.removeItem(STORAGE.LOCAL_TOKEN);
+      localStorage.setItem(STORAGE.REMEMBER, '0');
+    }
+  } catch { /* ignore */ }
+}
+function clearTokenStorage() {
+  try {
+    localStorage.removeItem(STORAGE.LOCAL_TOKEN);
+    sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
+  } catch { /* ignore */ }
+}
 
 // --- API + session --------------------------------------------------------
 async function api(path, { method = 'GET', body, auth = true } = {}) {
@@ -88,8 +123,11 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
   return { status: r.status, data };
 }
 
-function applySession(data) {
-  if (data.token) { state.session.token = data.token; try { localStorage.setItem('sv_token', data.token); } catch { /* ignore */ } }
+function applySession(data, opts = {}) {
+  if (data.token) {
+    state.session.token = data.token;
+    if (opts.persist !== false) persistToken(data.token, opts.remember !== false);
+  }
   if (data.user) {
     state.session.user = data.user;
     state.profile.name = data.user.name || state.profile.name;
@@ -121,7 +159,7 @@ function applyTheme() {
 }
 function setAppearance(a) {
   state.settings.appearance = a;
-  try { localStorage.setItem('sv_theme', a); } catch { /* ignore */ }
+  try { localStorage.setItem(STORAGE.THEME, a); } catch { /* ignore */ }
   applyTheme();
   closeSheet();
   render();
@@ -258,7 +296,7 @@ const screens = {};
 screens.welcome = () => `
   <div class="scroll" style="padding:70px 22px 14px;display:flex;flex-direction:column">
     <div class="flex items-center" style="gap:9px;margin-bottom:auto">
-      <img src="/logo.svg" alt="StatVibe" style="width:34px;height:34px;border-radius:9px" />
+      <img src="${imgSrc('/logo.svg', { w: 96, h: 96 })}" alt="StatVibe" style="width:34px;height:34px;border-radius:9px" />
       <span style="font-size:17px;font-weight:700;letter-spacing:-.2px">StatVibe</span>
     </div>
     <div style="margin:28px 0 26px">
@@ -287,7 +325,12 @@ screens.register = () => `
     <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Free during beta. Your account starts blank — you'll set up your business next.</div>
     <div class="field"><label>Full name</label><input id="regName" type="text" placeholder="Sam Rivera" autocomplete="name" /></div>
     <div class="field"><label>Work email</label><input id="regEmail" type="email" placeholder="you@business.com" autocomplete="email" /></div>
-    <div class="field"><label>Password <span style="color:var(--muted-3);font-weight:400">· min 8 characters</span></label><input id="regPwd" type="password" placeholder="••••••••" autocomplete="new-password" /></div>
+    <div class="field"><label>Password <span style="color:var(--muted-3);font-weight:400">· min 8 characters</span></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="regPwd" type="password" placeholder="••••••••" autocomplete="new-password" style="flex:1" />
+        <button class="pill" type="button" data-act="togglePwd" data-target="regPwd">Show</button>
+      </div>
+    </div>
     <label class="flex" style="gap:9px;align-items:flex-start;margin:4px 0 18px;cursor:pointer">
       <input id="regTerms" type="checkbox" style="margin-top:2px;width:16px;height:16px;accent-color:var(--teal)" />
       <span style="font-size:12px;color:var(--muted);line-height:1.5">I agree to the <b data-act="showTerms" data-tab-terms="terms" style="color:var(--teal);cursor:pointer">Terms of Service</b> and <b data-act="showTerms" data-tab-terms="privacy" style="color:var(--teal);cursor:pointer">Privacy Policy</b>.</span>
@@ -302,7 +345,16 @@ screens.login = () => `
     <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Welcome back</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Sign in to your StatVibe workspace.</div>
     <div class="field"><label>Work email</label><input id="loginEmail" type="email" placeholder="you@business.com" autocomplete="email" /></div>
-    <div class="field"><label>Password</label><input id="loginPwd" type="password" placeholder="••••••••" autocomplete="current-password" /></div>
+    <div class="field"><label>Password</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="loginPwd" type="password" placeholder="••••••••" autocomplete="current-password" style="flex:1" />
+        <button class="pill" type="button" data-act="togglePwd" data-target="loginPwd">Show</button>
+      </div>
+    </div>
+    <label class="flex items-center" style="gap:8px;margin-top:-2px;margin-bottom:12px;cursor:pointer">
+      <input id="loginRemember" type="checkbox" ${state.auth.remember ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--teal)" />
+      <span style="font-size:12px;color:var(--muted)">Remember me on this device</span>
+    </label>
     <button class="btn" data-act="doLogin" style="margin-top:4px">Sign in</button>
     <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">New here? <b data-act="toRegister" style="color:var(--teal);cursor:pointer">Create an account</b></div>
     <div style="text-align:center;margin-top:10px"><b data-act="guest" style="font-size:12.5px;color:var(--muted-2);cursor:pointer">Continue as guest instead</b></div>
@@ -336,7 +388,7 @@ screens.setup = () => {
   return `
   <div class="scroll" style="padding:54px 22px 30px">
     <div class="flex items-center gap-10 mb-16">
-      <img src="/logo.svg" alt="StatVibe" style="width:30px;height:30px;border-radius:8px" />
+      <img src="${imgSrc('/logo.svg', { w: 80, h: 80 })}" alt="StatVibe" style="width:30px;height:30px;border-radius:8px" />
       <div><div style="font-size:12px;color:var(--muted-2)">Welcome${state.session.user && state.session.user.isGuest ? ', guest' : (state.session.user ? ', ' + esc(state.session.user.name.split(' ')[0]) : '')}</div><div style="font-size:11px;color:var(--teal);font-weight:600">Set up your business</div></div>
     </div>
     <div style="font-size:23px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px">Tell us about your business</div>
@@ -1121,6 +1173,15 @@ function bindClicks(root) {
       case 'doRegister': doRegister(); break;
       case 'doLogin': doLogin(); break;
       case 'showTerms': push('terms', { tab: t.dataset.tabTerms || 'terms' }); break;
+      case 'togglePwd': {
+        const id = t.dataset.target;
+        const inp = id ? document.getElementById(id) : null;
+        if (!inp) break;
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        t.textContent = show ? 'Hide' : 'Show';
+        break;
+      }
       case 'logout': doLogout(); break;
       // setup wizard
       case 'suSells': captureSetup(); state.setupDraft.sellsProducts = t.dataset.v === 'yes'; render(); break;
@@ -1216,6 +1277,16 @@ function bindClicks(root) {
   // sheet picks
   const sheet = document.getElementById('sheet');
   sheet.onclick = (e) => {
+    const toggle = e.target.closest('[data-act="togglePwd"]');
+    if (toggle) {
+      const inp = document.getElementById(toggle.dataset.target || '');
+      if (inp) {
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide' : 'Show';
+      }
+      return;
+    }
     const pick = e.target.closest('[data-pick]');
     if (pick) {
       const w = pick.dataset.pick;
@@ -1632,7 +1703,7 @@ function downloadSheet() {
 /* ---- Auth / session actions ---- */
 async function doGuest() {
   const { status, data } = await api('/auth/guest', { method: 'POST', auth: false });
-  if (status === 201 || status === 200) { applySession(data); state.stack = []; render(); toast('Exploring as guest'); }
+  if (status === 201 || status === 200) { applySession(data, { remember: false }); state.stack = []; render(); toast('Exploring as guest'); }
   else toast(data.error || 'Could not start guest session');
 }
 async function doRegister() {
@@ -1640,20 +1711,22 @@ async function doRegister() {
   const terms = ($('#regTerms') || {}).checked;
   if (!terms) { toast('Please accept the Terms & Privacy Policy'); return; }
   const { status, data } = await api('/auth/register', { method: 'POST', auth: false, body: { name: (name || '').trim(), email: (email || '').trim(), password, acceptedTerms: !!terms } });
-  if (status === 201) { applySession(data); state.stack = []; render(); toast('Account created — set up your business'); }
+  if (status === 201) { applySession(data, { remember: true }); state.auth.remember = true; state.stack = []; render(); toast('Account created — set up your business'); }
   else toast(data.error || 'Registration failed');
 }
 async function doLogin() {
   const email = (($('#loginEmail') || {}).value || '').trim(), password = ($('#loginPwd') || {}).value;
+  const remember = !!(($('#loginRemember') || {}).checked);
+  state.auth.remember = remember;
   const { status, data } = await api('/auth/login', { method: 'POST', auth: false, body: { email, password } });
-  if (status === 200) { applySession(data); state.stack = []; state.tab = 'stats'; render(); toast('Welcome back'); }
+  if (status === 200) { applySession(data, { remember }); state.stack = []; state.tab = 'stats'; render(); toast('Welcome back'); }
   else toast(data.error || 'Sign in failed');
 }
 async function doLogout() {
   await api('/auth/logout', { method: 'POST' });
-  try { localStorage.removeItem('sv_token'); } catch { /* ignore */ }
+  clearTokenStorage();
   const curr = state.session.currencies;
-  state.session = { token: null, user: null, account: null, inventory: [], currencies: curr, loaded: true };
+  state.session = { token: null, user: null, account: null, inventory: [], currencies: curr, cloudinary: state.session.cloudinary, loaded: true };
   state.authed = false; state.stack = []; state.tab = 'stats'; render(); toast('Signed out');
 }
 function captureSetup() {
@@ -1735,13 +1808,13 @@ function restockSheet(id) {
 /* ---- Privacy & Security / billing ---- */
 function changePasswordSheet() {
   openSheet(`<h3>Change password</h3>
-    <div class="field" style="margin-top:12px"><label>Current password</label><input id="cpCur" type="password" autocomplete="current-password"/></div>
-    <div class="field"><label>New password · min 8 characters</label><input id="cpNew" type="password" autocomplete="new-password"/></div>
+    <div class="field" style="margin-top:12px"><label>Current password</label><div style="display:flex;gap:8px;align-items:center"><input id="cpCur" type="password" autocomplete="current-password" style="flex:1"/><button class="pill" type="button" data-act="togglePwd" data-target="cpCur">Show</button></div></div>
+    <div class="field"><label>New password · min 8 characters</label><div style="display:flex;gap:8px;align-items:center"><input id="cpNew" type="password" autocomplete="new-password" style="flex:1"/><button class="pill" type="button" data-act="togglePwd" data-target="cpNew">Show</button></div></div>
     <button class="btn" id="cpSave">Update password</button>`);
   setTimeout(() => { const b = document.getElementById('cpSave'); if (b) b.onclick = async () => {
     const currentPassword = (document.getElementById('cpCur') || {}).value, newPassword = (document.getElementById('cpNew') || {}).value;
     const { status, data } = await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
-    if (status === 200) { if (data.token) { state.session.token = data.token; try { localStorage.setItem('sv_token', data.token); } catch { /* ignore */ } } closeSheet(); toast('Password updated'); }
+    if (status === 200) { if (data.token) { state.session.token = data.token; persistToken(data.token, state.auth.remember); } closeSheet(); toast('Password updated'); }
     else toast(data.error || 'Could not update password');
   }; }, 30);
 }
@@ -1754,7 +1827,7 @@ function deleteAccountConfirm() {
     const n = document.getElementById('daNo'); if (n) n.onclick = closeSheet;
     const y = document.getElementById('daYes'); if (y) y.onclick = async () => {
       const { status } = await api('/account', { method: 'DELETE' }); closeSheet();
-      if (status === 200) { try { localStorage.removeItem('sv_token'); } catch { /* ignore */ } const cur = state.session.currencies; state.session = { token: null, user: null, account: null, inventory: [], currencies: cur, loaded: true }; state.authed = false; state.stack = []; render(); toast('Account deleted'); }
+      if (status === 200) { clearTokenStorage(); const cur = state.session.currencies; state.session = { token: null, user: null, account: null, inventory: [], currencies: cur, cloudinary: state.session.cloudinary, loaded: true }; state.authed = false; state.stack = []; render(); toast('Account deleted'); }
       else toast('Could not delete account');
     };
   }, 30);
@@ -1943,17 +2016,27 @@ function applyHash() {
 }
 
 async function boot() {
-  try { const th = localStorage.getItem('sv_theme'); if (th) state.settings.appearance = th; } catch { /* ignore */ }
+  try { const th = localStorage.getItem(STORAGE.THEME); if (th) state.settings.appearance = th; } catch { /* ignore */ }
   applyTheme();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.settings.appearance === 'System') applyTheme(); });
-  try { const m = await (await fetch('/api/meta')).json(); state.session.currencies = m.currencies || []; } catch { /* offline */ }
+  try {
+    const m = await (await fetch('/api/meta')).json();
+    state.session.currencies = m.currencies || [];
+    state.session.cloudinary = m.cloudinary || null;
+  } catch { /* offline */ }
   await loadModels();
-  let tok = null; try { tok = localStorage.getItem('sv_token'); } catch { /* ignore */ }
+  let remember = true;
+  try { remember = localStorage.getItem(STORAGE.REMEMBER) !== '0'; } catch { /* ignore */ }
+  state.auth.remember = remember;
+  let tok = null;
+  try { tok = remember ? localStorage.getItem(STORAGE.LOCAL_TOKEN) : sessionStorage.getItem(STORAGE.SESSION_TOKEN); } catch { /* ignore */ }
   if (tok) {
     state.session.token = tok;
     const { status, data } = await api('/auth/me');
-    if (status === 200) { applySession(data); if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory(), loadConversations()]); } }
-    else { try { localStorage.removeItem('sv_token'); } catch { /* ignore */ } state.session.token = null; }
+    if (status === 200) {
+      applySession(data, { persist: false });
+      if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory(), loadConversations()]); }
+    } else { clearTokenStorage(); state.session.token = null; }
   }
   state.session.loaded = true;
   render();
