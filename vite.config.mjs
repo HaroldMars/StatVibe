@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
 import path from 'node:path';
+import fs from 'node:fs';
 import { defineConfig } from 'vite';
 
 const require = createRequire(import.meta.url);
@@ -25,10 +26,23 @@ function localApiPlugin() {
   };
 }
 
+function copyPublicShellPlugin() {
+  const files = ['sw.js'];
+  return {
+    name: 'statvibe-copy-shell',
+    closeBundle() {
+      const outDir = path.resolve('dist');
+      for (const file of files) {
+        fs.copyFileSync(path.resolve('public', file), path.join(outDir, file));
+      }
+    },
+  };
+}
+
 export default defineConfig({
   root: 'public',
   publicDir: false,
-  plugins: [localApiPlugin()],
+  plugins: [localApiPlugin(), copyPublicShellPlugin()],
   build: {
     outDir: '../dist',
     emptyOutDir: true,
