@@ -16,10 +16,21 @@ tabular — IBM Plex + mono numerals, one restrained teal accent.
 ## Quick start
 
 ```bash
-npm start            # → http://localhost:4173
+npm run dev          # Vite dev server + local /api middleware
 ```
 
-No dependencies to install — the server uses Node built-ins only (**Node 18+**).
+For a production-like local run:
+
+```bash
+npm run build
+npm start            # serves dist/ when present, else public/
+```
+
+Backend-only mode is still available:
+
+```bash
+npm run dev:server   # zero-dependency Node server on :4173
+```
 
 ## AI integration (free, local)
 
@@ -145,10 +156,10 @@ npm run smoke  # browser end-to-end smoke via headless Chrome (skips if none fou
 
 ## Deployment
 
-### Vercel (recommended)
+### Vercel (recommended, Vite + serverless API)
 
-The repo is Vercel-ready: `vercel.json` serves `public/` statically and routes `/api/*`
-to a serverless function (`api/index.js`, which wraps the shared handler in `server.js`).
+The repo is Vercel-ready with a Vite static build (`dist/`) plus a serverless API:
+`/api/*` routes to `api/index.js` (which wraps the shared handler in `server.js`).
 
 1. Import the repo in Vercel (no build command needed).
 2. **Add durable storage:** Vercel → **Storage → KV** → *Create* and connect it. That
