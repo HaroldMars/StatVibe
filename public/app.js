@@ -394,12 +394,12 @@ screens.welcome = () => `
         .map(([e, t, s]) => `<div class="flex items-center gap-12"><div style="width:38px;height:38px;border-radius:11px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;font-size:18px">${e}</div><div><div style="font-size:13.5px;font-weight:600">${t}</div><div style="font-size:11.5px;color:var(--muted-2)">${s}</div></div></div>`).join('')}
     </div>
     <div class="stack gap-10">
-      <button class="btn" data-act="toRegister">Create free account</button>
+      <button class="btn" data-act="toRegister">Start free</button>
       <button class="btn outline" data-act="guest">Try as guest — no sign up</button>
-      <button class="btn ghost" data-act="toLogin" style="padding:6px">I already have an account</button>
+      <button type="button" data-act="toLogin" style="background:none;border:none;box-shadow:none;padding:8px;color:var(--teal);font:600 13px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent">I already have an account</button>
     </div>
     <div style="text-align:center;margin-top:14px"><span data-act="download" style="font-size:12.5px;color:var(--teal);font-weight:600;cursor:pointer">📲 Download / install the app</span></div>
-    <div style="text-align:center;font-size:10.5px;color:var(--muted-3);line-height:1.6;margin-top:20px">A new, upcoming project of<br><b style="color:var(--muted);font-weight:600">Illuminary Peak Company</b> · 2026</div>
+    <div style="text-align:center;font-size:10.5px;color:var(--muted-3);line-height:1.6;margin-top:20px">A new, upcoming project of<br><a href="https://illuminary-peak.vercel.app/" target="_blank" rel="noopener noreferrer" style="color:var(--muted);font-weight:600;text-decoration:none">Illuminary Peak Company</a> · 2026</div>
   </div>`;
 
 screens.register = () => `
