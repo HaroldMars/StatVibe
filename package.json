@@ -20,7 +20,6 @@
     "test": "node --test test/*.test.js",
     "smoke": "node test/smoke.mjs"
   },
-  "dependencies": {},
   "devDependencies": {
     "vite": "^7.1.0"
   }
