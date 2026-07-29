@@ -1,31 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="StatVibe logo">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6e7bff"/>
-      <stop offset="1" stop-color="#5865f2"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7381ff" />
+      <stop offset="1" stop-color="#5865f2" />
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#b5f0ff"/>
-      <stop offset="1" stop-color="#8fdcff"/>
+    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c2f4ff" />
+      <stop offset="1" stop-color="#93e3ff" />
     </linearGradient>
-    <filter id="soft" x="-30%" y="-30%" width="160%" height="170%">
-      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1f2b63" flood-opacity="0.35"/>
-    </filter>
   </defs>
 
-  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#bg)"/>
-  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="rgba(255,255,255,0.32)"/>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#tile)" />
+  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="#ffffff" stroke-opacity="0.35" />
 
-  <!-- friendly badge shape -->
-  <g filter="url(#soft)">
-    <path d="M50 22C34 22 22 34 22 50s12 28 28 28 28-12 28-28S66 22 50 22Z" fill="#ffffff"/>
-  </g>
+  <circle cx="50" cy="50" r="28" fill="#ffffff" />
 
-  <!-- analytics bars -->
-  <rect x="35" y="52" width="7" height="13" rx="3.5" fill="#5f6cf5"/>
-  <rect x="46.5" y="44" width="7" height="21" rx="3.5" fill="#5f6cf5"/>
-  <rect x="58" y="37" width="7" height="28" rx="3.5" fill="#5f6cf5"/>
+  <rect x="35" y="53" width="7" height="12" rx="3.5" fill="#5f6cf5" />
+  <rect x="46.5" y="45" width="7" height="20" rx="3.5" fill="#5f6cf5" />
+  <rect x="58" y="38" width="7" height="27" rx="3.5" fill="#5f6cf5" />
 
-  <!-- vibe spark -->
-  <path fill="url(#accent)" d="M68 30l2.3 6.2 6.2 2.3-6.2 2.3L68 47l-2.3-6.2-6.2-2.3 6.2-2.3z"/>
+  <path fill="url(#spark)" d="M68 30l2.2 6 6 2.2-6 2.2-2.2 6-2.2-6-6-2.2 6-2.2z" />
 </svg>
