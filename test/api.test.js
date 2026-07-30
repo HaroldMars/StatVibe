@@ -223,6 +223,24 @@ test('account setup requires business name and validates currency', async () => 
   assert.equal(r.json.account.currency, 'PHP');
 });
 
+test('account PATCH persists statsDraft and calc for the session', async () => {
+  const r = await req('PATCH', '/api/account', {
+    headers: auth(userToken),
+    body: {
+      statsDraft: { revenue: '1000', products: '10', avgPrice: '100' },
+      calc: { tab: 'Product', unitCost: 12, freight: 1, overhead: 2, markup: 40, targetMargin: 40 },
+    },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.account.statsDraft.revenue, '1000');
+  assert.equal(r.json.account.calc.tab, 'Product');
+  assert.equal(r.json.account.calc.unitCost, 12);
+  const me = await req('GET', '/api/auth/me', { headers: auth(userToken) });
+  assert.equal(me.status, 200);
+  assert.equal(me.json.account.statsDraft.products, '10');
+  assert.equal(me.json.account.calc.markup, 40);
+});
+
 let itemId = null;
 test('inventory: add item with all fields', async () => {
   const r = await req('POST', '/api/inventory', { headers: auth(userToken), body: { name: 'Rice 5kg', stock: 120, price: 320, ratePerDay: 8, size: '5kg', weight: '5kg', unit: 'sacks' } });

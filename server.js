@@ -307,10 +307,11 @@ async function handleChat(res, body) {
 }
 
 function handleHealth(res) {
-  return listOllamaModels().then((m) =>
+  return Promise.all([listOllamaModels(), store.backend()]).then(([m, storage]) =>
     sendJSON(res, 200, {
       status: 'ok', version: VERSION, uptime_s: Math.round((Date.now() - START) / 1000),
       ollama: { host: OLLAMA, online: m.length > 0, models: m }, hosted_ai: hostedConfigured(), simulate_only: config.simulateOnly, admin_user: ADMIN_USER,
+      storage,
     })
   );
 }
@@ -451,7 +452,39 @@ async function getAuthUser(req) {
 }
 
 function blankAccount() {
-  return { setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, plan: 'Free', createdAt: Date.now() };
+  return {
+    setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, plan: 'Free', createdAt: Date.now(),
+    statsDraft: { revenue: '', products: '', avgPrice: '' },
+    calc: { tab: 'Retail', unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
+    supply: { onHand: 0, reorder: 0, cover: 0 },
+  };
+}
+
+function sanitizeStatsDraft(raw) {
+  if (!raw || typeof raw !== 'object') return { revenue: '', products: '', avgPrice: '' };
+  return {
+    revenue: String(raw.revenue ?? '').slice(0, 40),
+    products: String(raw.products ?? '').slice(0, 40),
+    avgPrice: String(raw.avgPrice ?? '').slice(0, 40),
+  };
+}
+
+function sanitizeCalc(raw) {
+  const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+  const tab = ['Retail', 'Product', 'Supply'].includes(raw && raw.tab) ? raw.tab : 'Retail';
+  return {
+    tab,
+    unitCost: n(raw && raw.unitCost, 42),
+    freight: n(raw && raw.freight, 5.72),
+    overhead: n(raw && raw.overhead, 5.1),
+    targetMargin: n(raw && raw.targetMargin, 55),
+    markup: n(raw && raw.markup, 55),
+  };
+}
+
+function sanitizeSupply(raw) {
+  const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+  return { onHand: n(raw && raw.onHand, 0), reorder: n(raw && raw.reorder, 0), cover: n(raw && raw.cover, 0) };
 }
 
 async function bootstrapUser(base) {
@@ -549,6 +582,9 @@ async function handleAccount(req, res, sub, body) {
       if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise requires sales contact' });
       acct.plan = plan;
     }
+    if (b.statsDraft !== undefined) acct.statsDraft = sanitizeStatsDraft(b.statsDraft);
+    if (b.calc !== undefined) acct.calc = sanitizeCalc(b.calc);
+    if (b.supply !== undefined) acct.supply = sanitizeSupply(b.supply);
     await store.setAccount(user.id, acct);
     return sendJSON(res, 200, { ok: true, account: acct });
   }

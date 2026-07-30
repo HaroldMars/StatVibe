@@ -97,6 +97,62 @@ function loadStatsDraft() {
 }
 function saveStatsDraft() {
   try { localStorage.setItem('sv_stats_draft', JSON.stringify(state.statsDraft)); } catch { /* ignore */ }
+  scheduleAccountPersist();
+}
+function applyWorkspaceFromAccount(account) {
+  if (!account) return;
+  const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  if (account.statsDraft && typeof account.statsDraft === 'object') {
+    state.statsDraft = {
+      revenue: account.statsDraft.revenue || '',
+      products: account.statsDraft.products || '',
+      avgPrice: account.statsDraft.avgPrice || '',
+    };
+    saveStatsDraftLocalOnly();
+  }
+  if (account.calc && typeof account.calc === 'object') {
+    state.calc = {
+      tab: ['Retail', 'Product', 'Supply'].includes(account.calc.tab) ? account.calc.tab : state.calc.tab,
+      unitCost: num(account.calc.unitCost, state.calc.unitCost),
+      freight: num(account.calc.freight, state.calc.freight),
+      overhead: num(account.calc.overhead, state.calc.overhead),
+      targetMargin: num(account.calc.targetMargin, state.calc.targetMargin),
+      markup: num(account.calc.markup, state.calc.markup),
+    };
+  }
+  if (account.supply && typeof account.supply === 'object') {
+    state.supply = {
+      onHand: num(account.supply.onHand, 0),
+      reorder: num(account.supply.reorder, 0),
+      cover: num(account.supply.cover, 0),
+    };
+  }
+}
+function saveStatsDraftLocalOnly() {
+  try { localStorage.setItem('sv_stats_draft', JSON.stringify(state.statsDraft)); } catch { /* ignore */ }
+}
+let accountPersistTimer = null;
+function scheduleAccountPersist() {
+  if (!state.authed || !(state.session.user) || state.session.user.isGuest) return;
+  clearTimeout(accountPersistTimer);
+  accountPersistTimer = setTimeout(() => { persistAccountWorkspace().catch(() => {}); }, 500);
+}
+async function persistAccountWorkspace() {
+  if (!state.authed || !(state.session.user) || state.session.user.isGuest) return;
+  const { status, data } = await api('/account', {
+    method: 'PATCH',
+    body: { statsDraft: state.statsDraft, calc: state.calc, supply: state.supply },
+  });
+  if (status === 200 && data.account) state.session.account = data.account;
+}
+function calcSummary() {
+  const c = state.calc;
+  const landed = c.unitCost + c.freight + c.overhead;
+  const price = landed / (1 - (c.markup || 1) / 100);
+  const margin = price > 0 ? ((price - landed) / price) * 100 : 0;
+  const inv = state.session.inventory || [];
+  const onHand = inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0) || (state.supply.onHand || 0);
+  return { landed, price, margin, onHand, items: inv.length, markup: c.markup };
 }
 const bizName = () => (state.session.account && state.session.account.businessName) || 'My Business';
 const userName = () => (state.session.user && state.session.user.name) || 'Guest';
@@ -165,6 +221,7 @@ function applySession(data, opts = {}) {
   }
   if (data.account) {
     state.session.account = data.account;
+    applyWorkspaceFromAccount(data.account);
     if (data.account.plan) {
       state.plan = data.account.plan;
       const limits = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
@@ -326,7 +383,15 @@ function render() {
   const top = state.stack.length ? state.stack[state.stack.length - 1] : null;
   const topName = top ? top.screen : null;
   let html;
-  if (topName === 'admin') {
+  if (!state.session.loaded) {
+    html = `<div class="scroll pad" style="display:flex;align-items:center;justify-content:center;min-height:70vh">
+      <div style="text-align:center">
+        <div class="typing" style="justify-content:center;margin-bottom:14px"><i></i><i></i><i></i></div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Restoring your account</div>
+        <div style="font-size:12.5px;color:var(--muted)">Signing you back into Stats &amp; Calc…</div>
+      </div>
+    </div>`;
+  } else if (topName === 'admin') {
     html = screens.admin();                                  // dev console — any time
   } else if (!state.authed) {
     html = topName === 'register' ? screens.register()
@@ -537,6 +602,8 @@ function statsCard() {
   const first = points[0].split(',');
   const last = points[points.length - 1].split(',');
   const area = `M${first[0]},92 L${points.join(' L')} L${last[0]},92 Z`;
+  const cs = calcSummary();
+  const askQ = `Analyze my business. Stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail suggested price ${money(cs.price)} at ${cs.margin.toFixed(1)}% margin (markup ${cs.markup}%), Product landed cost ${money(cs.landed)} (unit ${money(state.calc.unitCost)} + freight ${money(state.calc.freight)} + overhead ${money(state.calc.overhead)}), Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
   return `
     <div class="card mb-12" style="padding:16px 16px 14px;cursor:pointer" data-act="goto" data-s="revenue">
       <div class="row-between mb-8">
@@ -556,15 +623,38 @@ function statsCard() {
       ${[['Revenue', money(revenue), '', 'up'], ['Products', totalStock.toLocaleString(), '', 'up'], ['Avg price', money(avgPrice), '', 'up']]
         .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div>${d ? `<div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--teal)">${d}</div>` : ''}</div>`).join('')}
     </div>
+    <div class="card mb-12" style="padding:14px 15px">
+      <div class="row-between mb-10">
+        <div style="font-size:13px;font-weight:600">From Calculator</div>
+        <button class="pill" data-tab="calc" style="font-size:11px">Open Calc ›</button>
+      </div>
+      <div class="grid-3">
+        <div>
+          <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Retail</div>
+          <div class="big-num" style="font-size:16px">${money(cs.price)}</div>
+          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">${cs.margin.toFixed(1)}% margin</div>
+        </div>
+        <div>
+          <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Product</div>
+          <div class="big-num" style="font-size:16px">${money(cs.landed)}</div>
+          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">Landed cost</div>
+        </div>
+        <div>
+          <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Supply</div>
+          <div class="big-num" style="font-size:16px">${cs.onHand.toLocaleString()}</div>
+          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">${cs.items} SKU${cs.items === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+    </div>
     <div class="card dark mb-12" style="padding:14px 15px">
       <div class="flex items-center" style="gap:7px;margin-bottom:8px">
         ${I.spark('#7FE3C8', 15, true)}
         <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Stats insight</span>
       </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>.</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>. Calc suggests retail at <b style="color:#fff">${money(cs.price)}</b> (${cs.margin.toFixed(1)}% margin) with supply of <b style="color:#fff">${cs.onHand.toLocaleString()}</b>.</div>
       <div class="insight-actions">
         <button class="btn sm mint" data-act="editStatsInputs">Edit stats</button>
-        <button class="btn sm" data-act="askAI" data-q="Analyze my stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Give me 3 actions to grow next month." style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
+        <button class="btn sm" data-act="askAI" data-q="${esc(askQ)}" style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
       </div>
     </div>`;
 }
@@ -1254,7 +1344,7 @@ function bindClicks(root) {
     const seg = t.closest('[data-seg]');
     if (seg && t.dataset.v) {
       const which = seg.dataset.seg;
-      if (which === 'calc') state.calc.tab = t.dataset.v;
+      if (which === 'calc') { state.calc.tab = t.dataset.v; scheduleAccountPersist(); }
       if (which === 'period') state.period = t.dataset.v;
       render();
       return;
@@ -1375,7 +1465,7 @@ function bindClicks(root) {
       case 'toggleSettingBlend': state.settings.blend = !state.settings.blend; state.models.blend = state.settings.blend; render(); break;
       case 'toggleNotifications': state.settings.notifications = !state.settings.notifications; render(); toast(`Notifications ${state.settings.notifications ? 'on' : 'off'}`); break;
       case 'saveProfile': back(); toast('Profile saved ✓'); break;
-      case 'changePwd': toast('Password reset link sent'); break;
+      case 'changePwd': changePasswordSheet(); break;
       case 'twoFactor': toast('Two-factor setup coming soon'); break;
       case 'pickAppearance': themePicker(); break;
       case 'signout': doLogout(); break;
@@ -1406,7 +1496,7 @@ function bindClicks(root) {
     }
   });
 
-  // sheet picks
+  // sheet picks + sheet actions (Save in Edit stats lives here, not in #app)
   const sheet = document.getElementById('sheet');
   sheet.onclick = (e) => {
     const toggle = e.target.closest('[data-act="togglePwd"]');
@@ -1427,8 +1517,29 @@ function bindClicks(root) {
       closeSheet();
       return;
     }
-    if (e.target.closest('[data-close]')) closeSheet();
+    if (e.target.closest('[data-close]')) { closeSheet(); return; }
+    const actEl = e.target.closest('[data-act]');
+    if (actEl && actEl.dataset.act) runSheetAct(actEl);
   };
+}
+
+async function runSheetAct(t) {
+  const act = t.dataset.act;
+  if (act === 'saveStatsInputsEdit') {
+    state.statsDraft.revenue = ((document.getElementById('statsRevenueEdit') || {}).value || '').trim();
+    state.statsDraft.products = ((document.getElementById('statsProductsEdit') || {}).value || '').trim();
+    state.statsDraft.avgPrice = ((document.getElementById('statsAvgPriceEdit') || {}).value || '').trim();
+    if (!hasStatInputs()) { toast('Enter revenue, products, and avg price'); return; }
+    saveStatsDraft();
+    closeSheet();
+    render();
+    toast('Stats updated');
+    return;
+  }
+  if (act === 'copyTag') {
+    if (navigator.clipboard) await navigator.clipboard.writeText(t.dataset.tag || '');
+    toast('Code copied');
+  }
 }
 
 // Per-render bindings for elements that are recreated on each screen.
@@ -1437,7 +1548,7 @@ function wireScreen(root) {
   root.querySelectorAll('.calc-input').forEach((inp) => {
     inp.addEventListener('input', () => {
       const v = parseFloat(inp.value.replace(/[^0-9.]/g, ''));
-      if (!isNaN(v)) { state.calc[inp.dataset.k] = v; updateCalc(); }
+      if (!isNaN(v)) { state.calc[inp.dataset.k] = v; updateCalc(); scheduleAccountPersist(); }
     });
     inp.addEventListener('focus', () => inp.select());
   });
@@ -2165,6 +2276,8 @@ async function boot() {
   applyTheme();
   loadStatsDraft();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.settings.appearance === 'System') applyTheme(); });
+  state.session.loaded = false;
+  render();
   try {
     const m = await (await fetch('/api/meta')).json();
     state.session.currencies = m.currencies || [];
@@ -2180,7 +2293,11 @@ async function boot() {
     if (status === 200) {
       // Re-persist real accounts so they survive across visits.
       applySession(data, { remember: !(data.user && data.user.isGuest) });
-      if (state.session.account && state.session.account.setupComplete) { await Promise.all([loadIdeas(), loadHistory(), loadConversations()]); }
+      state.stack = [];
+      if (state.session.account && state.session.account.setupComplete) {
+        state.tab = 'stats';
+        await Promise.all([loadIdeas(), loadHistory(), loadConversations()]);
+      }
     } else { clearTokenStorage(); state.session.token = null; }
   }
   state.session.loaded = true;
