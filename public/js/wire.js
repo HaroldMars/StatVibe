@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { $, esc, toast, hasStatInputs, saveStatsDraft, money, scheduleAccountPersist, initials } from './utils.js';
 import { computeRetail, computeProduct } from './calc-math.js';
-import { openSheet, closeSheet } from './sheet.js';
+import { openSheet, closeSheet, setOnSheetBackdropDismiss } from './sheet.js';
 import { go, push, back, render } from './router.js';
 import { themePicker } from './theme.js';
 
@@ -37,6 +37,15 @@ export function wire(root) {
 }
 
 export function bindClicks(root) {
+  // Tapping the dimmed backdrop while the first-run tutorial is open = Skip.
+  setOnSheetBackdropDismiss(() => {
+    if (state.tutorial && state.tutorial.open) {
+      tutorialSkip();
+      return true;
+    }
+    return false;
+  });
+
   root.addEventListener('click', async (e) => {
     const t = e.target.closest('[data-act],[data-tab],[data-seg] button');
     if (!t) return;
@@ -241,6 +250,12 @@ export function bindClicks(root) {
 
 export async function runSheetAct(t) {
   const act = t.dataset.act;
+  // Tutorial sheet lives outside #app — handle its buttons here.
+  if (act === 'tutorialStart') { tutorialStart(); return; }
+  if (act === 'tutorialNext') { tutorialNext(); return; }
+  if (act === 'tutorialPrev') { tutorialPrev(); return; }
+  if (act === 'tutorialSkip') { await tutorialSkip(); return; }
+  if (act === 'tutorialFinish') { await tutorialFinish(); return; }
   if (act === 'saveStatsInputsEdit') {
     state.statsDraft.revenue = ((document.getElementById('statsRevenueEdit') || {}).value || '').trim();
     state.statsDraft.products = ((document.getElementById('statsProductsEdit') || {}).value || '').trim();

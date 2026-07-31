@@ -18,11 +18,18 @@ export function closeSheet() {
   document.getElementById('sheetBackdrop').classList.remove('show');
 }
 
+/** Optional hook — set by wire.js so backdrop dismiss can finish the tutorial. */
+export let onSheetBackdropDismiss = null;
+export function setOnSheetBackdropDismiss(fn) { onSheetBackdropDismiss = fn; }
+
 function wireSheetTouch() {
   const backdrop = document.getElementById('sheetBackdrop');
   if (backdrop && !backdrop._svBound) {
     backdrop._svBound = true;
-    backdrop.addEventListener('click', closeSheet);
+    backdrop.addEventListener('click', () => {
+      if (typeof onSheetBackdropDismiss === 'function' && onSheetBackdropDismiss()) return;
+      closeSheet();
+    });
   }
 
   // Mobile UX: allow swipe-down to dismiss bottom sheet.

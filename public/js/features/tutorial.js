@@ -49,8 +49,8 @@ function showTutorialSheet() {
       <div class="tutorial-emoji">👋</div>
       <h3>Welcome to StatVibe</h3>
       <p class="tutorial-copy">Take a quick tour of Stats, Calculator, Idea Hub, AI, and AgentTech — or skip and explore on your own.</p>
-      <button class="btn" data-act="tutorialStart">Start tutorial</button>
-      <button class="btn ghost" data-act="tutorialSkip" style="margin-top:8px">Skip</button>
+      <button type="button" class="btn" data-act="tutorialStart">Start tutorial</button>
+      <button type="button" class="btn ghost" data-act="tutorialSkip" style="margin-top:8px">Skip</button>
     </div>`);
     return;
   }
@@ -62,10 +62,10 @@ function showTutorialSheet() {
     <h3>${esc(s.title)}</h3>
     <p class="tutorial-copy">${esc(s.body)}</p>
     <div class="tutorial-nav">
-      ${step > 0 ? `<button class="btn outline" data-act="tutorialPrev" style="flex:1">Back</button>` : ''}
-      <button class="btn" data-act="${last ? 'tutorialFinish' : 'tutorialNext'}" style="flex:1">${last ? 'Finish' : 'Next'}</button>
+      ${step > 0 ? `<button type="button" class="btn outline" data-act="tutorialPrev" style="flex:1">Back</button>` : ''}
+      <button type="button" class="btn" data-act="${last ? 'tutorialFinish' : 'tutorialNext'}" style="flex:1">${last ? 'Finish' : 'Next'}</button>
     </div>
-    <button class="btn ghost" data-act="tutorialSkip" style="margin-top:8px">Skip tutorial</button>
+    <button type="button" class="btn ghost" data-act="tutorialSkip" style="margin-top:8px">Skip tutorial</button>
   </div>`);
 }
 
