@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { api } from './api.js';
+import { computeRetail, computeProduct } from './calc-math.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const app = () => document.getElementById('app');
@@ -86,13 +87,23 @@ export async function persistAccountWorkspace() {
   if (status === 200 && data.account) state.session.account = data.account;
 }
 export function calcSummary() {
-  const c = state.calc;
-  const landed = c.unitCost + c.freight + c.overhead;
-  const price = landed / (1 - (c.markup || 1) / 100);
-  const margin = price > 0 ? ((price - landed) / price) * 100 : 0;
+  const retail = computeRetail(state.calc);
+  const product = computeProduct(state.calc);
+  const active = state.calc.tab === 'Product' ? product : retail;
   const inv = state.session.inventory || [];
   const onHand = inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0) || (state.supply.onHand || 0);
-  return { landed, price, margin, onHand, items: inv.length, markup: c.markup };
+  return {
+    landed: active.cost,
+    price: active.price,
+    margin: active.margin,
+    profit: active.profit,
+    markup: retail.markup,
+    targetMargin: product.targetMargin,
+    retail,
+    product,
+    onHand,
+    items: inv.length,
+  };
 }
 export const bizName = () => (state.session.account && state.session.account.businessName) || 'My Business';
 export const userName = () => (state.session.user && state.session.user.name) || 'Guest';

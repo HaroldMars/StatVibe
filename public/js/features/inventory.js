@@ -4,21 +4,25 @@ import { $, app, currency, esc, money, toast, scheduleAccountPersist } from '../
 import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
 import { I } from '../icons.js';
+import { computePricing, computeProduct } from '../calc-math.js';
 
 export function updateCalc() {
-  const c = state.calc;
-  const landed = c.unitCost + c.freight + c.overhead;
-  const price = landed / (1 - c.markup / 100);
-  const margin = ((price - landed) / price) * 100;
   const root = app();
-  const priceEl = root.querySelector('.card.dark .big-num');
-  if (priceEl) priceEl.textContent = money(price);
-  const marginEl = root.querySelectorAll('.card.dark .big-num')[1];
-  if (marginEl) marginEl.textContent = margin.toFixed(1) + '%';
-  const meter = root.querySelector('.card.dark .meter > i');
-  if (meter) meter.style.width = Math.min(100, margin).toFixed(0) + '%';
-  const landedLine = root.querySelector('.card.dark .row-between span');
-  if (landedLine) landedLine.innerHTML = `Landed cost ${money(landed)} · Target margin`;
+  const card = root.querySelector('[data-calc-result]');
+  if (!card) return;
+  const active = computePricing(state.calc);
+  const product = computeProduct(state.calc);
+  const isProduct = state.calc.tab === 'Product';
+  const set = (key, text) => { const el = card.querySelector(`[data-calc="${key}"]`); if (el) el.textContent = text; };
+
+  set('price', money(active.price));
+  set('margin', `${active.margin.toFixed(1)}%`);
+  set('cost-line', `${isProduct ? 'Total product cost' : 'Landed cost'} ${money(active.cost)} · Profit ${money(active.profit)}/unit`);
+  set('target-line', isProduct ? `Target ${active.targetMargin}%` : `Markup ${active.markup}%`);
+  set('extra', isProduct ? `${active.markup.toFixed(1)}%` : money(active.profit));
+  set('compare', isProduct ? money(active.profit) : money(product.price));
+  const meter = card.querySelector('[data-calc="meter"]');
+  if (meter) meter.style.width = `${Math.min(100, active.margin).toFixed(0)}%`;
 }
 
 export function addItemSheet() {

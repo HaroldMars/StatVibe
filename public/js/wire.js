@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { $, esc, toast, hasStatInputs, saveStatsDraft, money, scheduleAccountPersist, initials } from './utils.js';
+import { computeRetail, computeProduct } from './calc-math.js';
 import { openSheet, closeSheet } from './sheet.js';
 import { go, push, back, render } from './router.js';
 import { themePicker } from './theme.js';
@@ -128,8 +129,18 @@ export function bindClicks(root) {
       }
 
       // calculator
-      case 'calcReset': state.calc = { tab: state.calc.tab, unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 }; render(); toast('Reset to SKU defaults'); break;
-      case 'calcAI': { const c = state.calc; runWorkspace(`Our Trailhead Jacket has a landed cost of ${money(c.unitCost + c.freight + c.overhead)} and we currently target a ${c.markup}% markup. Recommend an optimal retail price and margin, considering competitor positioning.`, 'Price optimization'); break; }
+      case 'calcReset': state.calc = { tab: state.calc.tab, unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 }; scheduleAccountPersist(); render(); toast('Reset to defaults'); break;
+      case 'calcAI': {
+        const c = state.calc;
+        const retail = computeRetail(c);
+        const product = computeProduct(c);
+        const active = c.tab === 'Product' ? product : retail;
+        const prompt = c.tab === 'Product'
+          ? `Our product costs ${money(active.cost)} total (materials ${money(c.unitCost)}, labor ${money(c.freight)}, overhead ${money(c.overhead)}). We target a ${active.targetMargin}% gross margin, which prices at ${money(active.price)} (profit ${money(active.profit)}/unit, implied markup ${active.markup.toFixed(1)}%). Recommend an optimal sell price and margin strategy vs competitors.`
+          : `Our retail SKU has a landed cost of ${money(active.cost)} (unit ${money(c.unitCost)} + freight ${money(c.freight)} + overhead ${money(c.overhead)}). We apply a ${active.markup}% markup for a shelf price of ${money(active.price)} (${active.margin.toFixed(1)}% gross margin, profit ${money(active.profit)}/unit). Recommend an optimal retail price and markup.`;
+        runWorkspace(prompt, c.tab === 'Product' ? 'Product price optimization' : 'Retail price optimization');
+        break;
+      }
       case 'reorder': toast('Reorder PO drafted — review in Agent'); break;
 
       // AI workspace
