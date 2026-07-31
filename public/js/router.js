@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { app } from './utils.js';
+import { app, imgSrc } from './utils.js';
 import { screens, tabScreens } from './screens/index.js';
 import { wire } from './wire.js';
 import { loadConversations } from './features/messaging.js';
@@ -9,19 +9,24 @@ export function go(tab) { state.tab = tab; state.stack = []; render(); if (tab =
 export function push(screen, params = {}) { state.stack.push({ screen, params }); render(); }
 export function back() { state.stack.pop(); render(); }
 
+function splashScreen() {
+  return `<div class="splash" role="status" aria-label="Loading StatVibe">
+    <img class="splash-logo" src="${imgSrc('/logo-main.png', { w: 192, h: 192 })}" alt="StatVibe" width="88" height="88" />
+    <div class="splash-name">StatVibe</div>
+  </div>`;
+}
+
 export function render() {
   const el = app();
   const top = state.stack.length ? state.stack[state.stack.length - 1] : null;
   const topName = top ? top.screen : null;
   let html;
-  if (!state.session.loaded) {
-    html = `<div class="scroll pad" style="display:flex;align-items:center;justify-content:center;min-height:70vh">
-      <div style="text-align:center">
-        <div class="typing" style="justify-content:center;margin-bottom:14px"><i></i><i></i><i></i></div>
-        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Restoring your account</div>
-        <div style="font-size:12.5px;color:var(--muted)">Signing you back into Stats &amp; Calc…</div>
-      </div>
-    </div>`;
+  // Logo splash only while restoring an existing signed-in session.
+  if (!state.session.loaded && state.session.restoring) {
+    html = splashScreen();
+  } else if (!state.session.loaded) {
+    // First visit / not signed in — show welcome immediately (no restore copy).
+    html = screens.welcome();
   } else if (topName === 'admin') {
     html = screens.admin();                                  // dev console — any time
   } else if (!state.authed) {

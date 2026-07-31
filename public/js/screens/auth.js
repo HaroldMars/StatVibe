@@ -4,6 +4,19 @@ import { esc, imgSrc } from '../utils.js';
 
 export const screens = {};
 
+function authErrorBanner() {
+  const msg = state.auth.formError;
+  if (!msg) return '';
+  const code = state.auth.formCode;
+  let action = '';
+  if (code === 'account_not_found') {
+    action = `<button type="button" class="auth-error-link" data-act="toRegister">Create an account</button>`;
+  } else if (code === 'email_taken') {
+    action = `<button type="button" class="auth-error-link" data-act="toLogin">Sign in</button>`;
+  }
+  return `<div class="auth-error" role="alert">${esc(msg)}${action ? ' ' + action : ''}</div>`;
+}
+
 screens.welcome = () => `
   <div class="scroll" style="padding:70px 22px 14px;display:flex;flex-direction:column">
     <div class="flex items-center" style="gap:9px;margin-bottom:auto">
@@ -21,50 +34,64 @@ screens.welcome = () => `
         .map(([e, t, s]) => `<div class="flex items-center gap-12"><div style="width:38px;height:38px;border-radius:11px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;font-size:18px">${e}</div><div><div style="font-size:13.5px;font-weight:600">${t}</div><div style="font-size:11.5px;color:var(--muted-2)">${s}</div></div></div>`).join('')}
     </div>
     <div class="stack gap-10">
-      <button class="btn" data-act="toRegister">Start free</button>
-      <button class="btn outline" data-act="guest">Try as guest — no sign up</button>
-      <button type="button" data-act="toLogin" style="background:none;border:none;box-shadow:none;padding:8px;color:var(--teal);font:600 13px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent">I already have an account</button>
+      <button class="btn" data-act="toRegister">Create account</button>
+      <button class="btn outline" data-act="toLogin">Log in</button>
     </div>
-    <div style="text-align:center;margin-top:14px"><span data-act="download" style="font-size:12.5px;color:var(--teal);font-weight:600;cursor:pointer">📲 Download / install the app</span></div>
+    <div style="text-align:center;margin-top:14px">
+      <button type="button" data-act="guest" style="background:none;border:none;box-shadow:none;padding:6px;color:var(--muted-2);font:500 12.5px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent">Continue without an account</button>
+    </div>
+    <div style="text-align:center;margin-top:10px"><span data-act="download" style="font-size:12.5px;color:var(--teal);font-weight:600;cursor:pointer">📲 Download / install the app</span></div>
     <div style="text-align:center;font-size:10.5px;color:var(--muted-3);line-height:1.6;margin-top:20px">A new, upcoming project of<br><a href="https://illuminary-peak.vercel.app/" target="_blank" rel="noopener noreferrer" style="color:var(--muted);font-weight:600;text-decoration:none">Illuminary Peak Company</a> · 2026</div>
   </div>`;
 
 screens.register = () => `
   ${appbar('Create account')}
   <div class="scroll" style="padding:14px 22px 24px">
-    <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Start your workspace</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Free during beta. Your account starts blank — you'll set up your business next.</div>
-    <div class="field"><label>Full name</label><input id="regName" type="text" placeholder="Sam Rivera" autocomplete="name" /></div>
-    <div class="field"><label>Work email</label><input id="regEmail" type="email" placeholder="you@business.com" autocomplete="email" /></div>
-    <div class="field"><label>Password <span style="color:var(--muted-3);font-weight:400">· min 8 characters</span></label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="regPwd" type="password" placeholder="••••••••" autocomplete="new-password" style="flex:1" />
-        <button class="pill" type="button" data-act="togglePwd" data-target="regPwd">Show</button>
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Create your StatVibe account</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">You'll use this email and password to sign in on any device.</div>
+    ${authErrorBanner()}
+    <form id="registerForm" autocomplete="on">
+      <div class="field"><label for="regName">Full name</label><input id="regName" name="name" type="text" placeholder="Sam Rivera" autocomplete="name" required minlength="2" /></div>
+      <div class="field"><label for="regEmail">Email</label><input id="regEmail" name="email" type="email" placeholder="you@business.com" autocomplete="email" required value="${esc(state.auth.emailDraft || '')}" /></div>
+      <div class="field"><label for="regPwd">Password <span style="color:var(--muted-3);font-weight:400">· at least 8 characters</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="regPwd" name="password" type="password" placeholder="••••••••" autocomplete="new-password" style="flex:1" required minlength="8" />
+          <button class="pill" type="button" data-act="togglePwd" data-target="regPwd">Show</button>
+        </div>
       </div>
-    </div>
-    <label class="flex" style="gap:9px;align-items:flex-start;margin:4px 0 18px;cursor:pointer">
-      <input id="regTerms" type="checkbox" style="margin-top:2px;width:16px;height:16px;accent-color:var(--teal)" />
-      <span style="font-size:12px;color:var(--muted);line-height:1.5">I agree to the <b data-act="showTerms" data-tab-terms="terms" style="color:var(--teal);cursor:pointer">Terms of Service</b> and <b data-act="showTerms" data-tab-terms="privacy" style="color:var(--teal);cursor:pointer">Privacy Policy</b>.</span>
-    </label>
-    <button class="btn" data-act="doRegister">Create account</button>
-    <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">Have an account? <b data-act="toLogin" style="color:var(--teal);cursor:pointer">Sign in</b></div>
+      <div class="field"><label for="regPwd2">Confirm password</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="regPwd2" name="password2" type="password" placeholder="••••••••" autocomplete="new-password" style="flex:1" required minlength="8" />
+          <button class="pill" type="button" data-act="togglePwd" data-target="regPwd2">Show</button>
+        </div>
+      </div>
+      <label class="flex" style="gap:9px;align-items:flex-start;margin:4px 0 18px;cursor:pointer">
+        <input id="regTerms" type="checkbox" style="margin-top:2px;width:16px;height:16px;accent-color:var(--teal)" />
+        <span style="font-size:12px;color:var(--muted);line-height:1.5">I agree to the <b data-act="showTerms" data-tab-terms="terms" style="color:var(--teal);cursor:pointer">Terms of Service</b> and <b data-act="showTerms" data-tab-terms="privacy" style="color:var(--teal);cursor:pointer">Privacy Policy</b>.</span>
+      </label>
+      <button class="btn" type="submit" data-act="doRegister" ${state.auth.busy ? 'disabled' : ''}>${state.auth.busy ? 'Creating account…' : 'Create account'}</button>
+    </form>
+    <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">Already have an account? <b data-act="toLogin" style="color:var(--teal);cursor:pointer">Log in</b></div>
   </div>`;
 
 screens.login = () => `
-  ${appbar('Sign in')}
+  ${appbar('Log in')}
   <div class="scroll" style="padding:14px 22px 24px">
-    <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Welcome back</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Sign in with an existing StatVibe account. Unregistered emails cannot sign in.</div>
-    <div class="field"><label>Work email</label><input id="loginEmail" type="email" placeholder="you@business.com" autocomplete="email" required /></div>
-    <div class="field"><label>Password</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="loginPwd" type="password" placeholder="••••••••" autocomplete="current-password" style="flex:1" required />
-        <button class="pill" type="button" data-act="togglePwd" data-target="loginPwd">Show</button>
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Log in to StatVibe</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Use the email and password from your registered account.</div>
+    ${authErrorBanner()}
+    <form id="loginForm" autocomplete="on">
+      <div class="field"><label for="loginEmail">Email</label><input id="loginEmail" name="email" type="email" placeholder="you@business.com" autocomplete="username" required value="${esc(state.auth.emailDraft || '')}" /></div>
+      <div class="field"><label for="loginPwd">Password</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="loginPwd" name="password" type="password" placeholder="••••••••" autocomplete="current-password" style="flex:1" required />
+          <button class="pill" type="button" data-act="togglePwd" data-target="loginPwd">Show</button>
+        </div>
       </div>
-    </div>
-    <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.45">You'll stay signed in on this device for 30 days, or until you sign out.</div>
-    <button class="btn" data-act="doLogin" style="margin-top:4px">Sign in</button>
-    <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">New here? <b data-act="toRegister" style="color:var(--teal);cursor:pointer">Create an account</b></div>
+      <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.45">You'll stay logged in on this device for 30 days, or until you log out.</div>
+      <button class="btn" type="submit" data-act="doLogin" ${state.auth.busy ? 'disabled' : ''}>${state.auth.busy ? 'Logging in…' : 'Log in'}</button>
+    </form>
+    <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">Don't have an account? <b data-act="toRegister" style="color:var(--teal);cursor:pointer">Create account</b></div>
   </div>`;
 
 screens.terms = (p = {}) => {
@@ -118,6 +145,6 @@ screens.setup = () => {
     </div>
 
     <button class="btn" data-act="finishSetup" style="margin-top:8px">Finish setup →</button>
-    <div style="text-align:center;margin-top:12px"><b data-act="logout" style="font-size:12px;color:var(--muted-2);cursor:pointer">Sign out</b></div>
+    <div style="text-align:center;margin-top:12px"><b data-act="logout" style="font-size:12px;color:var(--muted-2);cursor:pointer">Log out</b></div>
   </div>`;
 };

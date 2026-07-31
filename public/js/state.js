@@ -1,6 +1,6 @@
 export const state = {
   authed: false,
-  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], conversations: [], unreadTotal: 0, agentAutoReply: false, currencies: [], cloudinary: null, loaded: false },
+  session: { token: null, user: null, account: null, inventory: [], ideas: [], history: [], conversations: [], unreadTotal: 0, agentAutoReply: false, currencies: [], cloudinary: null, loaded: false, restoring: false },
   tab: 'stats',
   stack: [],            // sub-screen history: [{screen, params}]
   period: 'Month',
@@ -16,7 +16,7 @@ export const state = {
   lastAIOutput: null,
   alerts: null,          // set on first render
   settings: { blend: true, appearance: 'System', notifications: true },
-  auth: { remember: true },
+  auth: { remember: true, busy: false, formError: '', formCode: '', emailDraft: '' },
   profile: { name: 'Jordan Doyle', email: 'jordan@illuminarypeak.co', role: 'Owner', phone: '+1 (555) 018-2245', tz: 'Pacific Time · PT' },
   workspace: 'Illuminary Peak',
   admin: { authed: false, token: null, summary: null, busy: false, testOut: null, user: 'GenAdmin' },

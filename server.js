@@ -533,37 +533,44 @@ async function sessionPayload(res, status, token, user) {
 async function handleAuth(req, res, sub, body) {
   // POST /api/auth/register|login|guest|logout|change-password ; GET /api/auth/me
   if (sub === 'register' && req.method === 'POST') {
-    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON', code: 'invalid_json' });
     const email = auth.normalizeEmail(b.email);
-    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address' });
-    if (!auth.passwordOk(b.password)) return sendJSON(res, 400, { error: 'Password must be at least 8 characters' });
-    if (!b.acceptedTerms) return sendJSON(res, 400, { error: 'You must accept the Terms & Privacy Policy' });
-    if (await store.getUserByEmail(email)) return sendJSON(res, 409, { error: 'An account with that email already exists' });
+    const name = (b.name || '').trim();
+    if (!name || name.length < 2) return sendJSON(res, 400, { error: 'Enter your full name', code: 'name_required' });
+    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address', code: 'invalid_email' });
+    if (!auth.passwordOk(b.password)) return sendJSON(res, 400, { error: 'Password must be at least 8 characters', code: 'weak_password' });
+    if (!b.acceptedTerms) return sendJSON(res, 400, { error: 'You must accept the Terms & Privacy Policy', code: 'terms_required' });
+    if (await store.getUserByEmail(email)) {
+      return sendJSON(res, 409, { error: 'An account already exists with that email. Sign in instead.', code: 'email_taken' });
+    }
     const { token, user } = await bootstrapUser({
-      isGuest: false, email, name: (b.name || '').trim() || email.split('@')[0],
+      isGuest: false, email, name,
       phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
     });
     log('info', 'registered ' + user.email);
     return sessionPayload(res, 201, token, user);
   }
   if (sub === 'login' && req.method === 'POST') {
-    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON', code: 'invalid_json' });
     const email = auth.normalizeEmail(b.email);
     const password = typeof b.password === 'string' ? b.password : '';
     const rateKey = clientKey(req) + '|' + email;
     if (!allowLoginAttempt(rateKey)) {
-      return sendJSON(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.' });
+      return sendJSON(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.', code: 'rate_limited' });
     }
-    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address' });
-    if (!password) return sendJSON(res, 400, { error: 'Enter your password' });
+    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address', code: 'invalid_email' });
+    if (!password) return sendJSON(res, 400, { error: 'Enter your password', code: 'password_required' });
 
     const u = await store.getUserByEmail(email);
-    // Only existing registered accounts may sign in — never auto-create, never guests.
+    // Same gate as Google / Meta / banking: only existing registered accounts can sign in.
     if (!u || u.isGuest || !auth.isRegisteredUser(u)) {
-      return sendJSON(res, 401, { error: 'No StatVibe account found for that email. Please register first.' });
+      return sendJSON(res, 401, {
+        error: "Couldn't find a StatVibe account with that email. Create an account to continue.",
+        code: 'account_not_found',
+      });
     }
     if (!auth.verifyPassword(password, u.passwordHash)) {
-      return sendJSON(res, 401, { error: 'Incorrect email or password' });
+      return sendJSON(res, 401, { error: 'Incorrect email or password', code: 'invalid_credentials' });
     }
     clearLoginAttempts(rateKey);
     const token = auth.newToken();
