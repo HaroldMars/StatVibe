@@ -8,7 +8,9 @@ export const STORAGE = {
   THEME: 'sv_theme',
 };
 
-/** Persist a real-account token for up to 30 days (server also enforces expiry). Guests stay tab-only. */
+const PLAN_LIMITS = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
+
+/** Persist a registered-account token until logout. Guests stay tab-only. */
 export function persistToken(token, remember, expiresAt) {
   try {
     if (remember) {
@@ -33,14 +35,19 @@ export function clearTokenStorage() {
   } catch { /* ignore */ }
 }
 
-/** Returns false if a stored expiry timestamp is in the past. */
+/**
+ * Soft client hint only — never the sole reason to sign the user out.
+ * Server sliding TTL is authoritative; boot always verifies with /auth/me.
+ */
 export function storedSessionStillValid() {
   try {
     const raw = localStorage.getItem(STORAGE.TOKEN_EXPIRES);
-    if (!raw) return true; // unknown expiry — let the server decide
+    if (!raw) return true;
     const exp = Number(raw);
     if (!Number.isFinite(exp)) return true;
-    return exp > Date.now();
+    // Grace window: allow restore even if client clock thinks expiry passed;
+    // server will confirm or reject.
+    return exp > Date.now() - 7 * 24 * 3600 * 1000;
   } catch { return true; }
 }
 
@@ -55,6 +62,19 @@ export function getAuthToken() {
   const tok = readStoredToken();
   if (tok) state.session.token = tok;
   return tok;
+}
+
+export function applyUsage(usage) {
+  if (!usage || typeof usage !== 'object') return;
+  state.usage = {
+    used: Number(usage.used) || 0,
+    limit: Number(usage.limit) || state.usage.limit || 1000,
+    resetDays: usage.resetDays == null ? state.usage.resetDays : usage.resetDays,
+    resetAt: usage.resetAt || null,
+    period: usage.period || state.usage.period || 'week',
+    remaining: usage.remaining,
+  };
+  if (usage.plan) state.plan = usage.plan;
 }
 
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
@@ -76,6 +96,13 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
       return api(path, { method, body, auth: true });
     }
   }
+  // Keep sliding session expiry in sync whenever the server returns it.
+  if (data && data.session && data.session.expiresAt && state.session.token) {
+    state.session.expiresAt = data.session.expiresAt;
+    const isGuest = !!(state.session.user && state.session.user.isGuest);
+    if (!isGuest) persistToken(state.session.token, true, data.session.expiresAt);
+  }
+  if (data && data.usage) applyUsage(data.usage);
   return { status: r.status, data };
 }
 
@@ -99,9 +126,19 @@ export function applySession(data, opts = {}) {
     applyWorkspaceFromAccount(data.account);
     if (data.account.plan) {
       state.plan = data.account.plan;
-      const limits = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
-      if (limits[data.account.plan]) state.usage.limit = limits[data.account.plan];
+      if (PLAN_LIMITS[data.account.plan]) state.usage.limit = PLAN_LIMITS[data.account.plan];
     }
+  }
+  if (data.usage) applyUsage(data.usage);
+  else if (data.account) {
+    // Derive from account fields if older payloads omit usage.
+    applyUsage({
+      used: data.account.aiUsed || 0,
+      limit: PLAN_LIMITS[data.account.plan] || 1000,
+      resetDays: data.account.aiResetDays,
+      plan: data.account.plan || 'Free',
+      period: (data.account.plan || 'Free') === 'Free' ? 'week' : 'month',
+    });
   }
   if (data.inventory) state.session.inventory = data.inventory;
   state.authed = true;

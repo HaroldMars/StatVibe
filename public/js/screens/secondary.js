@@ -67,7 +67,7 @@ screens.alerts = () => {
     { grp: 'Today', icon: '✨', tint: 'var(--teal-tint)', title: 'Forecast beat plan', body: 'Q3 projected at $2.41M — 6.8% over plan.', time: '18m ago', unread: true },
     { grp: 'Today', icon: '⚠️', tint: 'var(--red-tint)', title: 'Low stock — Summit Pack 40L', body: 'Below reorder point. 6 days of cover left.', time: '1h ago', unread: true },
     { grp: 'Today', icon: '💬', tint: 'var(--slate-blue-tint)', title: 'Meridian Retail replied', body: '"Perfect, send the PO" — AgentTech ready.', time: '2h ago', unread: false, act: 'agent' },
-    { grp: 'Earlier', icon: '⏳', tint: 'var(--amber-tint)', title: 'Free plan 78% used', body: '780 of 1,000 AI actions used this month.', time: 'Yesterday', unread: false, act: 'plans' },
+    { grp: 'Earlier', icon: '⏳', tint: 'var(--amber-tint)', title: 'Free plan weekly limit', body: 'Free AI actions reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
   ]);
   const groups = [...new Set(A.map((a) => a.grp))];
   return `
@@ -285,11 +285,17 @@ screens.admin = () => {
 
 screens.plans = () => {
   const u = state.usage;
-  const pct = Math.round((u.used / u.limit) * 100);
+  const limit = u.limit || 1000;
+  const used = u.used || 0;
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  const period = u.period === 'month' ? 'month' : 'week';
+  const resetLabel = u.resetDays == null
+    ? 'no reset needed'
+    : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
   const plans = [
-    { name: 'Free', price: '$0', desc: '1,000 AI actions · 1 workspace · core dashboard & calculator' },
-    { name: 'Business', price: '$79', per: '/mo', pop: true, desc: '50,000 AI actions · unlimited workspaces · all models & Blend · AgentTech · predictive forecasting' },
-    { name: 'Pro', price: '$29', per: '/mo', desc: '10,000 AI actions · 3 workspaces · 2 models · project hub' },
+    { name: 'Free', price: '$0', desc: '1,000 AI actions per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', price: '$29', per: '/mo', desc: '10,000 AI actions / month · 3 workspaces · project hub' },
+    { name: 'Business', price: '$79', per: '/mo', pop: true, desc: '50,000 AI actions / month · all models & Blend · AgentTech · forecasting' },
     { name: 'Enterprise', price: 'Custom', desc: 'Unlimited usage · SSO · audit logs · dedicated support & SLAs' },
   ];
   return `
@@ -297,9 +303,10 @@ screens.plans = () => {
   <div class="scroll pad" style="padding-top:6px">
     <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan}</div></div>
     <div class="card mb-14">
-      <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this month</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
+      <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this ${period}</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
       <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
-      <div style="font-size:11px;color:var(--muted-2)">${u.used.toLocaleString()} / ${u.limit.toLocaleString()} AI actions · resets in ${u.resetDays} days</div>
+      <div style="font-size:11px;color:var(--muted-2)">${used.toLocaleString()} / ${limit.toLocaleString()} AI actions · ${resetLabel}</div>
+      ${pct >= 100 ? `<button class="btn sm mint" data-act="goto" data-s="plans" style="margin-top:12px">Upgrade to keep using AI</button>` : ''}
     </div>
     <div class="stack gap-10">
       ${plans.map((p) => p.pop ? `
@@ -307,11 +314,12 @@ screens.plans = () => {
           <span class="tagchip" style="position:absolute;top:-9px;left:16px;background:var(--teal);color:#fff">Most popular</span>
           <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:22px;font-weight:600">${p.price}</span><span style="font-size:12px;color:#9FBAB2">${p.per}</span></div></div>
           <div style="font-size:12px;color:#C3D6D0;margin:8px 0 12px;line-height:1.55">${p.desc}</div>
-          <button class="btn mint sm" data-act="upgrade" data-p="${p.name}" style="padding:11px">Upgrade to ${p.name}</button>
+          <button class="btn mint sm" data-act="upgrade" data-p="${p.name}" style="padding:11px">${state.plan === p.name ? 'Current plan' : 'Upgrade to ' + p.name}</button>
         </div>` : `
         <button class="card" data-act="choosePlan" data-p="${p.name}" style="text-align:left;cursor:pointer">
           <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:17px;font-weight:600">${p.price}</span><span style="font-size:12px;color:var(--muted-2)">${p.per || ''}</span></div></div>
           <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5">${p.desc}</div>
+          ${state.plan === p.name ? '<div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:8px">Current plan</div>' : ''}
         </button>`).join('')}
     </div>
   </div>`;

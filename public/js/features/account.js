@@ -203,11 +203,21 @@ export function currencySheet() {
 /* ---- Plans ---- */
 export async function doUpgrade(name) {
   if (name === 'Enterprise') { toast('Enterprise — our team will reach out'); return; }
+  if (name === 'Free' || name === state.plan) { toast(name === state.plan ? 'Already on this plan' : 'You are on Free'); return; }
   const { status, data } = await api('/account/upgrade', { method: 'POST', body: { plan: name } });
   if (status === 200) {
     state.session.account = data.account;
     state.plan = name;
-    if (data.usageLimit) state.usage.limit = data.usageLimit;
+    if (data.usage) {
+      state.usage = {
+        used: data.usage.used || 0,
+        limit: data.usage.limit || data.usageLimit || 1000,
+        resetDays: data.usage.resetDays,
+        resetAt: data.usage.resetAt,
+        period: data.usage.period || 'month',
+        remaining: data.usage.remaining,
+      };
+    } else if (data.usageLimit) state.usage.limit = data.usageLimit;
     render(); toast(`Upgraded to ${name} ✓`);
   } else toast(data.error || 'Upgrade failed');
 }

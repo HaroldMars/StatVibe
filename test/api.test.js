@@ -95,20 +95,30 @@ test('GET /api/models → engines + 4 cloud models', async () => {
   assert.equal(r.json.cloud.every((c) => c.available === false), true, 'cloud default unavailable');
 });
 
+test('POST /api/chat without auth → 401', async () => {
+  const r = await req('POST', '/api/chat', { body: { messages: [{ role: 'user', content: 'hi' }] } });
+  assert.equal(r.status, 401);
+  assert.equal(r.json.code, 'not_signed_in');
+});
+
 test('POST /api/chat with no messages → 400', async () => {
-  const r = await req('POST', '/api/chat', { body: { messages: [] } });
+  const reg = await req('POST', '/api/auth/register', { body: { email: 'chattest@test.co', password: 'password1', name: 'Chat Test', acceptedTerms: true } });
+  assert.equal(reg.status, 201);
+  chatToken = reg.json.token;
+  const r = await req('POST', '/api/chat', { headers: auth(chatToken), body: { messages: [] } });
   assert.equal(r.status, 400);
 });
 
 test('POST /api/chat → simulated content (Ollama unreachable)', async () => {
-  const r = await req('POST', '/api/chat', { body: { messages: [{ role: 'user', content: 'Draft a board update' }] } });
+  const r = await req('POST', '/api/chat', { headers: auth(chatToken), body: { messages: [{ role: 'user', content: 'Draft a board update' }] } });
   assert.equal(r.status, 200);
   assert.equal(r.json.simulated, true);
   assert.ok(r.json.content.length > 20, 'has content');
+  assert.ok(r.json.usage, 'usage meter returned');
 });
 
 test('POST /api/chat with a cloud model → simulated with note', async () => {
-  const r = await req('POST', '/api/chat', { body: { model: 'claude', messages: [{ role: 'user', content: 'hi' }] } });
+  const r = await req('POST', '/api/chat', { headers: auth(chatToken), body: { model: 'claude', messages: [{ role: 'user', content: 'hi' }] } });
   assert.equal(r.status, 200);
   assert.equal(r.json.simulated, true);
   assert.match(r.json.note || '', /hosted/i);
@@ -175,6 +185,7 @@ test('GET /api/meta → currency list', async () => {
 
 const auth = (token) => ({ Authorization: 'Bearer ' + token });
 let userToken = null;
+let chatToken = null;
 
 test('register validates email, password, and terms', async () => {
   assert.equal((await req('POST', '/api/auth/register', { body: { email: 'bad', password: 'x', acceptedTerms: true, name: 'A' } })).status, 400);
@@ -191,8 +202,11 @@ test('register creates a blank account and never returns the password hash', asy
   assert.ok(r.json.user.tag && r.json.user.tag.startsWith('SV-'));
   assert.equal(r.json.account.setupComplete, false, 'blank account');
   assert.equal(r.json.account.tutorialDone, false, 'tutorial pending');
-  assert.ok(r.json.session && r.json.session.expiresAt, '30-day session expiry returned');
-  assert.equal(r.json.session.ttlDays, 30);
+  assert.ok(r.json.session && r.json.session.expiresAt, 'session expiry returned');
+  assert.equal(r.json.session.ttlDays, 365);
+  assert.equal(r.json.session.persistent, true);
+  assert.ok(r.json.usage, 'usage included');
+  assert.equal(r.json.usage.period, 'week');
   userToken = r.json.token;
 });
 
@@ -230,13 +244,15 @@ test('login rejects unregistered email and empty credentials', async () => {
   assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: '' } })).status, 400);
 });
 
-test('login session lasts ~30 days and /auth/me restores it', async () => {
+test('login session persists and /auth/me restores it', async () => {
   const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret1' } });
   assert.equal(ok.status, 200);
+  assert.ok(ok.json.session.expiresAt > Date.now() + 300 * 24 * 3600 * 1000, 'long-lived session');
   const me = await req('GET', '/api/auth/me', { headers: auth(ok.json.token) });
   assert.equal(me.status, 200);
   assert.equal(me.json.user.email, 'owner@test.co');
   assert.equal(me.json.user.isGuest, false);
+  assert.equal(me.json.session.persistent, true);
 });
 
 test('guest session works and is flagged', async () => {
@@ -448,10 +464,57 @@ test('account upgrade records payment and shows in admin', async () => {
   assert.ok(pays.json.payments.some((p) => p.plan === 'Pro' && p.email === 'alpha@test.co'));
 });
 
-test('AI chat records token usage', async () => {
-  await req('POST', '/api/chat', { body: { messages: [{ role: 'user', content: 'Say hello briefly.' }] } });
+test('AI chat requires auth and records usage for the signed-in plan', async () => {
+  assert.equal((await req('POST', '/api/chat', { body: { messages: [{ role: 'user', content: 'Say hello briefly.' }] } })).status, 401);
+  const ok = await req('POST', '/api/chat', { headers: auth(alphaToken), body: { messages: [{ role: 'user', content: 'Say hello briefly.' }] } });
+  assert.equal(ok.status, 200);
+  assert.ok(ok.json.usage, 'usage returned');
+  assert.ok(ok.json.usage.used >= 1);
+  assert.equal(ok.json.usage.limit, 10000); // alpha upgraded to Pro earlier
+  assert.equal(ok.json.usage.period, 'month');
   const s = await req('GET', '/api/admin/summary', { headers: { 'x-admin-token': 'test-token' } });
   assert.ok(s.json.metrics.tokens.total > 0, 'tokens counted');
+});
+
+test('Free AI quota returns 402 at limit; weekly window resets after 7 days', async () => {
+  const store = require('../lib/store');
+  const reg = await req('POST', '/api/auth/register', { body: { email: 'quota@test.co', password: 'password1', name: 'Quota User', acceptedTerms: true } });
+  assert.equal(reg.status, 201);
+  const tok = reg.json.token;
+  const uid = reg.json.user.id;
+  const acct = await store.getAccount(uid);
+  acct.plan = 'Free';
+  acct.aiUsed = 1000;
+  acct.aiPeriodStart = Date.now();
+  await store.setAccount(uid, acct);
+
+  const blocked = await req('POST', '/api/chat', { headers: auth(tok), body: { messages: [{ role: 'user', content: 'Hello' }] } });
+  assert.equal(blocked.status, 402);
+  assert.equal(blocked.json.code, 'quota_exceeded');
+  assert.equal(blocked.json.upgradeRequired, true);
+  assert.ok(blocked.json.usage);
+
+  const stale = await store.getAccount(uid);
+  stale.aiUsed = 1000;
+  stale.aiPeriodStart = Date.now() - (8 * 24 * 3600 * 1000);
+  await store.setAccount(uid, stale);
+
+  const after = await req('POST', '/api/chat', { headers: auth(tok), body: { messages: [{ role: 'user', content: 'Hello again' }] } });
+  assert.equal(after.status, 200);
+  assert.equal(after.json.usage.used, 1);
+  assert.equal(after.json.usage.period, 'week');
+});
+
+test('/auth/me slides session expiry so clients stay signed in', async () => {
+  const login = await req('POST', '/api/auth/login', { body: { email: 'quota@test.co', password: 'password1' } });
+  assert.equal(login.status, 200);
+  const exp1 = login.json.session.expiresAt;
+  assert.ok(exp1 > Date.now());
+  await new Promise((r) => setTimeout(r, 20));
+  const me = await req('GET', '/api/auth/me', { headers: auth(login.json.token) });
+  assert.equal(me.status, 200);
+  assert.ok(me.json.session.expiresAt >= exp1, 'expiry slides forward on activity');
+  assert.equal(me.json.session.persistent, true);
 });
 
 test('paymongo QR: clear "not configured" when no key set', async () => {

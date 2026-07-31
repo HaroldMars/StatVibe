@@ -88,7 +88,7 @@ screens.login = () => `
           <button class="pill" type="button" data-act="togglePwd" data-target="loginPwd">Show</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.45">You'll stay logged in on this device for 30 days, or until you log out.</div>
+      <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.45">You'll stay signed in on this device until you log out.</div>
       <button class="btn" type="submit" data-act="doLogin" ${state.auth.busy ? 'disabled' : ''}>${state.auth.busy ? 'Logging in…' : 'Log in'}</button>
     </form>
     <div style="text-align:center;margin-top:16px;font-size:12.5px;color:var(--muted)">Don't have an account? <b data-act="toRegister" style="color:var(--teal);cursor:pointer">Create account</b></div>

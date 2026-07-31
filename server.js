@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const store = require('./lib/store');
 const auth = require('./lib/auth');
+const usageLib = require('./lib/usage');
+const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, consume: consumeUsage } = usageLib;
 
 // Load .env (if present) into process.env before reading any config. Minimal,
 // dependency-free parser: `KEY=value`, `#` comments, optional quotes. Existing
@@ -103,13 +105,11 @@ const CURRENCIES = [
   { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit', dp: 2 },
 ];
 const CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
-const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 days — stay signed in until logout / expiry
+const SESSION_TTL = 365 * 24 * 3600 * 1000; // registered: stay signed in ~1 year, sliding on each request (until logout)
 const GUEST_SESSION_TTL = 12 * 3600 * 1000; // guests: 12 hours, never persisted on the client
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 10;
 const loginAttempts = new Map(); // key → { count, resetAt }
-const PLAN_PRICES = { Free: 0, Pro: 29, Business: 79, Enterprise: 0 };
-const PLAN_LIMITS = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
 let _lastTs = 0;
 function monotonicNow() { const t = Date.now(); _lastTs = t > _lastTs ? t : _lastTs + 1; return _lastTs; }
 const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
@@ -246,13 +246,40 @@ async function handleModels(res) {
   sendJSON(res, 200, { ollama_online: ollamaModels.length > 0, hosted: hostedConfigured(), simulate_only: config.simulateOnly, default_blend: config.defaultBlend, admin_user: ADMIN_USER, engines, cloud });
 }
 
-async function handleChat(res, body) {
+async function handleChat(req, res, body) {
+  // Metered AI requires a signed-in account so Free weekly limits can be enforced.
+  const authed = await getAuthUser(req);
+  if (!authed) {
+    return sendJSON(res, 401, {
+      error: 'Sign in to use AI. Create a free account to get weekly AI actions.',
+      code: 'not_signed_in',
+    });
+  }
+  const { user } = authed;
+
   let payload;
   try { payload = JSON.parse(body || '{}'); } catch { return sendJSON(res, 400, { error: 'Invalid JSON' }); }
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   if (!messages.length) return sendJSON(res, 400, { error: 'messages[] required' });
+
+  let acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
+  const gate = consumeUsage(acct, 1);
+  if (!gate.ok) {
+    await store.setAccount(user.id, gate.account); // persist rolled period if any
+    log('info', 'AI quota exceeded ' + (user.email || user.id) + ' plan=' + gate.account.plan);
+    return sendJSON(res, 402, {
+      error: gate.error,
+      code: gate.code,
+      usage: usageView(gate.account),
+      upgradeRequired: true,
+    });
+  }
+  acct = gate.account;
+  await store.setAccount(user.id, acct);
+
   metrics.chats++;
   const requested = payload.model;
+  const usage = usageView(acct);
 
   // A cloud model that an admin has enabled has no real backend here, so it is
   // answered by the simulator with a clear note. Otherwise use Ollama.
@@ -263,7 +290,7 @@ async function handleChat(res, body) {
     const note = isCloud ? `${requested} is a hosted model — simulated in this prototype.` : undefined;
     const content = simulate(messages);
     recordTokens(requested || 'simulated', promptText, content);
-    return sendJSON(res, 200, { simulated: true, model: requested || 'simulated', content, note });
+    return sendJSON(res, 200, { simulated: true, model: requested || 'simulated', content, note, usage });
   }
 
   const local = await listOllamaModels();
@@ -277,14 +304,14 @@ async function handleChat(res, body) {
     // (this is the production path on Vercel). Falls back to simulated on error.
     if (hostedConfigured()) {
       try {
-        const { model: hm, content, usage } = await callHostedAI(messages);
+        const { model: hm, content, usage: tokUsage } = await callHostedAI(messages);
         metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1;
-        recordUsage(hm, usage, promptText, content);
-        return sendJSON(res, 200, { simulated: false, model: hm, content });
+        recordUsage(hm, tokUsage, promptText, content);
+        return sendJSON(res, 200, { simulated: false, model: hm, content, usage });
       } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
     }
     metrics.simulated++;
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages) });
+    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), usage });
   }
 
   try {
@@ -302,11 +329,11 @@ async function handleChat(res, body) {
       const mm = (metrics.tokens.byModel[model] ||= { prompt: 0, completion: 0, total: 0 });
       mm.prompt += p; mm.completion += c; mm.total += p + c;
     } else { recordTokens(model, promptText, content); }
-    return sendJSON(res, 200, { simulated: false, model, content });
+    return sendJSON(res, 200, { simulated: false, model, content, usage });
   } catch (e) {
     metrics.aiErrors++; metrics.simulated++;
     log('warn', 'chat fallback: ' + e.message);
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), note: String(e.message || e) });
+    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), note: String(e.message || e), usage });
   }
 }
 
@@ -487,6 +514,7 @@ function blankAccount() {
   return {
     setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, plan: 'Free', createdAt: Date.now(),
     tutorialDone: false, tutorialCompletedAt: null,
+    aiUsed: 0, aiPeriodStart: Date.now(),
     statsDraft: { revenue: '', products: '', avgPrice: '' },
     calc: { tab: 'Retail', unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
     supply: { onHand: 0, reorder: 0, cover: 0 },
@@ -532,14 +560,28 @@ async function bootstrapUser(base) {
 }
 
 async function sessionPayload(res, status, token, user, expiresAt) {
-  const account = await store.getAccount(user.id);
+  let account = await store.getAccount(user.id) || blankAccount();
+  const prevUsed = account.aiUsed;
+  const prevStart = account.aiPeriodStart;
+  account = ensureUsage(account);
+  if (account.aiUsed !== prevUsed || account.aiPeriodStart !== prevStart || account.aiLimit == null) {
+    await store.setAccount(user.id, account);
+  }
   const inventory = await store.listInventory(user.id);
   const sessionMeta = {
     expiresAt: expiresAt || null,
     ttlMs: user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL,
-    ttlDays: user.isGuest ? null : 30,
+    ttlDays: user.isGuest ? null : 365,
+    persistent: !user.isGuest,
   };
-  sendJSON(res, status, { token, user: auth.publicUser(user), account, inventory, session: sessionMeta });
+  sendJSON(res, status, {
+    token,
+    user: auth.publicUser(user),
+    account,
+    inventory,
+    session: sessionMeta,
+    usage: usageView(account),
+  });
 }
 
 async function handleAuth(req, res, sub, body) {
@@ -562,7 +604,7 @@ async function handleAuth(req, res, sub, body) {
       isGuest: false, email, name,
       phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
     });
-    log('info', 'registered ' + user.email + ' (session 30d, login-ready)');
+    log('info', 'registered ' + user.email + ' (persistent session, login-ready)');
     return sessionPayload(res, 201, token, user, expiresAt);
   }
   if (sub === 'login' && req.method === 'POST') {
@@ -612,6 +654,7 @@ async function handleAuth(req, res, sub, body) {
   const { user, token } = authed;
 
   if (sub === 'me' && req.method === 'GET') {
+    // getAuthUser already slid the TTL — return the fresh expiry so the client stays in sync.
     const s = await store.getSession(token);
     return sessionPayload(res, 200, token, user, s && s.expiresAt);
   }
@@ -696,10 +739,14 @@ async function handleAccount(req, res, sub, body) {
     const plan = String(b.plan || '');
     if (!PLAN_PRICES.hasOwnProperty(plan)) return sendJSON(res, 400, { error: 'Unknown plan' });
     if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise — our team will reach out' });
-    const acct = await store.getAccount(user.id) || blankAccount();
+    const acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
     const prev = acct.plan || 'Free';
     acct.plan = plan;
-    await store.setAccount(user.id, acct);
+    // Upgrading starts a fresh usage window at the new plan limit.
+    acct.aiUsed = 0;
+    acct.aiPeriodStart = Date.now();
+    const normalized = ensureUsage(acct);
+    await store.setAccount(user.id, normalized);
     const amount = PLAN_PRICES[plan] || 0;
     const payment = await store.addPayment({
       id: auth.newId('pay'),
@@ -715,7 +762,13 @@ async function handleAccount(req, res, sub, body) {
       createdAt: Date.now(),
     });
     log('info', `plan upgrade ${user.id} ${prev} → ${plan}`);
-    return sendJSON(res, 200, { ok: true, account: acct, payment, usageLimit: PLAN_LIMITS[plan] || 1000 });
+    return sendJSON(res, 200, {
+      ok: true,
+      account: normalized,
+      payment,
+      usageLimit: PLAN_LIMITS[plan] || 1000,
+      usage: usageView(normalized),
+    });
   }
   if (sub === '' && req.method === 'DELETE') {
     await store.deleteUser(user.id); log('info', 'deleted account ' + user.id);
@@ -1033,7 +1086,7 @@ async function requestHandler(req, res) {
     if (p === '/api/health') return handleHealth(res);
     if (p === '/api/meta' && req.method === 'GET') return handleMeta(res);
     if (p === '/api/models' && req.method === 'GET') return handleModels(res);
-    if (p === '/api/chat' && req.method === 'POST') return handleChat(res, await readBody(req));
+    if (p === '/api/chat' && req.method === 'POST') return handleChat(req, res, await readBody(req));
     if (p.startsWith('/api/auth/')) return handleAuth(req, res, p.slice('/api/auth/'.length), ['POST', 'PATCH'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/account' || p.startsWith('/api/account/')) {
       const sub = p === '/api/account' ? '' : p.slice('/api/account/'.length);
