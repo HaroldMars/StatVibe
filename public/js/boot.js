@@ -36,15 +36,7 @@ export async function boot() {
   applyTheme();
   loadStatsDraft();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.settings.appearance === 'System') applyTheme(); });
-  state.session.loaded = false;
   state.authed = false;
-  render();
-  try {
-    const m = await (await fetch('/api/meta')).json();
-    state.session.currencies = m.currencies || [];
-    state.session.cloudinary = m.cloudinary || null;
-  } catch { /* offline */ }
-  await loadModels();
   state.auth.remember = true;
 
   // Prefer durable localStorage token (registered accounts). Guests use sessionStorage only.
@@ -55,6 +47,18 @@ export async function boot() {
     if (tok) fromLocal = true;
     else tok = sessionStorage.getItem(STORAGE.SESSION_TOKEN);
   } catch { /* ignore */ }
+
+  // Logo splash only when a previous session exists; otherwise skip straight to welcome.
+  state.session.restoring = !!tok;
+  state.session.loaded = !tok;
+  render();
+
+  try {
+    const m = await (await fetch('/api/meta')).json();
+    state.session.currencies = m.currencies || [];
+    state.session.cloudinary = m.cloudinary || null;
+  } catch { /* offline */ }
+  await loadModels();
 
   if (tok) {
     state.session.token = tok;
@@ -80,6 +84,7 @@ export async function boot() {
       state.authed = false;
     }
   }
+  state.session.restoring = false;
   state.session.loaded = true;
   render();
   if (location.hash) applyHash();

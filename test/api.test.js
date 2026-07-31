@@ -177,9 +177,10 @@ const auth = (token) => ({ Authorization: 'Bearer ' + token });
 let userToken = null;
 
 test('register validates email, password, and terms', async () => {
-  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'bad', password: 'x', acceptedTerms: true } })).status, 400);
-  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'short', acceptedTerms: true } })).status, 400);
-  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough', acceptedTerms: false } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'bad', password: 'x', acceptedTerms: true, name: 'A' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'short', acceptedTerms: true, name: 'Ada' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough', acceptedTerms: false, name: 'Ada' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough', acceptedTerms: true, name: '' } })).status, 400);
 });
 
 test('register creates a blank account and never returns the password hash', async () => {
@@ -193,12 +194,15 @@ test('register creates a blank account and never returns the password hash', asy
 });
 
 test('duplicate email → 409', async () => {
-  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret', acceptedTerms: true } });
+  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret', name: 'Other', acceptedTerms: true } });
   assert.equal(r.status, 409);
+  assert.equal(r.json.code, 'email_taken');
 });
 
 test('login rejects wrong password, accepts correct', async () => {
-  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'wrong' } })).status, 401);
+  const wrong = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'wrong' } });
+  assert.equal(wrong.status, 401);
+  assert.equal(wrong.json.code, 'invalid_credentials');
   const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.token);
@@ -209,7 +213,8 @@ test('login rejects wrong password, accepts correct', async () => {
 test('login rejects unregistered email and empty credentials', async () => {
   const missing = await req('POST', '/api/auth/login', { body: { email: 'nobody@notregistered.test', password: 'whatever12' } });
   assert.equal(missing.status, 401);
-  assert.match(String(missing.json.error || ''), /No StatVibe account|register/i);
+  assert.equal(missing.json.code, 'account_not_found');
+  assert.match(String(missing.json.error || ''), /Couldn't find|Create an account/i);
 
   assert.equal((await req('POST', '/api/auth/login', { body: { email: 'bad', password: 'whatever12' } })).status, 400);
   assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: '' } })).status, 400);
@@ -476,7 +481,7 @@ test('cannot start a conversation with your own code', async () => {
 });
 
 test('unknown code → 404; conversation endpoints require auth', async () => {
-  const A = await req('POST', '/api/auth/register', { body: { email: 'u404@test.co', password: 'password1', name: 'U', acceptedTerms: true } });
+  const A = await req('POST', '/api/auth/register', { body: { email: 'u404@test.co', password: 'password1', name: 'User', acceptedTerms: true } });
   assert.equal((await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: 'SV-NOPEXX' } })).status, 404);
   assert.equal((await req('GET', '/api/conversations')).status, 401);
 });

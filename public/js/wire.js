@@ -14,7 +14,7 @@ import {
   adminResetApp, openAdmin, adminFetch,
 } from './features/admin.js';
 import {
-  doGuest, doRegister, doLogin, doLogout, captureSetup, finishSetup, changePasswordSheet,
+  doGuest, doRegister, doLogin, doLogout, captureSetup, finishSetup, changePasswordSheet, goAuthScreen,
 } from './features/auth.js';
 import { addItemSheet, predictItem, itemMenu, updateCalc } from './features/inventory.js';
 import {
@@ -56,12 +56,12 @@ export function bindClicks(root) {
     switch (act) {
       case 'back': back(); break;
       // auth
-      case 'toRegister': state.stack = [{ screen: 'register', params: {} }]; render(); break;
-      case 'toLogin': state.stack = [{ screen: 'login', params: {} }]; render(); break;
+      case 'toRegister': goAuthScreen('register'); break;
+      case 'toLogin': goAuthScreen('login'); break;
       case 'guest': doGuest(); break;
       case 'download': downloadSheet(); break;
-      case 'doRegister': doRegister(); break;
-      case 'doLogin': doLogin(); break;
+      case 'doRegister': e.preventDefault(); doRegister(); break;
+      case 'doLogin': e.preventDefault(); doLogin(); break;
       case 'showTerms': push('terms', { tab: t.dataset.tabTerms || 'terms' }); break;
       case 'togglePwd': {
         const id = t.dataset.target;
@@ -267,4 +267,10 @@ export function wireScreen(root) {
   if (ai) ai.addEventListener('keydown', (e) => { if (e.key === 'Enter') agentSend(); });
   const ap = $('#aiPrompt');
   if (ap) ap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { const p = ap.value.trim(); if (p) runWorkspace(p, titleFor(p)); } });
+
+  // Auth forms — Enter submits like Google / Instagram / banking apps.
+  const loginForm = root.querySelector('#loginForm');
+  if (loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+  const registerForm = root.querySelector('#registerForm');
+  if (registerForm) registerForm.addEventListener('submit', (e) => { e.preventDefault(); doRegister(); });
 }
