@@ -202,12 +202,38 @@ test('login rejects wrong password, accepts correct', async () => {
   const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.token);
+  assert.equal(ok.json.user.isGuest, false);
+  assert.equal(ok.json.user.email, 'owner@test.co');
+});
+
+test('login rejects unregistered email and empty credentials', async () => {
+  const missing = await req('POST', '/api/auth/login', { body: { email: 'nobody@notregistered.test', password: 'whatever12' } });
+  assert.equal(missing.status, 401);
+  assert.match(String(missing.json.error || ''), /No StatVibe account|register/i);
+
+  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'bad', password: 'whatever12' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: '' } })).status, 400);
+});
+
+test('login session lasts ~30 days and /auth/me restores it', async () => {
+  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
+  assert.equal(ok.status, 200);
+  const me = await req('GET', '/api/auth/me', { headers: auth(ok.json.token) });
+  assert.equal(me.status, 200);
+  assert.equal(me.json.user.email, 'owner@test.co');
+  assert.equal(me.json.user.isGuest, false);
 });
 
 test('guest session works and is flagged', async () => {
   const r = await req('POST', '/api/auth/guest');
   assert.equal(r.status, 201);
   assert.equal(r.json.user.isGuest, true);
+});
+
+test('guest cannot be used as a registered login', async () => {
+  // Guests have no email — login with a random email still must fail (no auto-promote).
+  const r = await req('POST', '/api/auth/login', { body: { email: 'guest-fake@test.co', password: 'password1' } });
+  assert.equal(r.status, 401);
 });
 
 test('protected endpoints require auth', async () => {

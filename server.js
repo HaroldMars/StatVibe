@@ -103,7 +103,11 @@ const CURRENCIES = [
   { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit', dp: 2 },
 ];
 const CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
-const SESSION_TTL = 3650 * 24 * 3600 * 1000; // ~10 years — stay signed in until logout / delete account
+const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 days — stay signed in until logout / expiry
+const GUEST_SESSION_TTL = 12 * 3600 * 1000; // guests: 12 hours, never persisted on the client
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+const loginAttempts = new Map(); // key → { count, resetAt }
 const PLAN_PRICES = { Free: 0, Pro: 29, Business: 79, Enterprise: 0 };
 const PLAN_LIMITS = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
 let _lastTs = 0;
@@ -439,16 +443,39 @@ async function handleAdmin(req, res, sub, body) {
 // --- Auth / accounts / inventory ------------------------------------------
 function parseJSON(body) { try { return JSON.parse(body || '{}'); } catch { return null; } }
 
+function clientKey(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
+}
+
+function allowLoginAttempt(key) {
+  const now = Date.now();
+  let row = loginAttempts.get(key);
+  if (!row || row.resetAt <= now) {
+    row = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+    loginAttempts.set(key, row);
+  }
+  row.count += 1;
+  return row.count <= LOGIN_MAX_ATTEMPTS;
+}
+
+function clearLoginAttempts(key) { loginAttempts.delete(key); }
+
 async function getAuthUser(req) {
   const h = req.headers['authorization'] || '';
   const m = /^Bearer\s+(.+)$/i.exec(h);
   if (!m) return null;
-  const s = await store.getSession(m[1]);
+  const token = m[1];
+  const s = await store.getSession(token);
   if (!s) return null;
-  // Sliding expiry so active accounts stay signed in until logout / delete.
-  await store.touchSession(m[1], Date.now() + SESSION_TTL);
   const u = await store.getUserById(s.userId);
-  return u ? { user: u, token: m[1] } : null;
+  if (!u) {
+    await store.deleteSession(token);
+    return null;
+  }
+  // Sliding 30-day window for registered accounts; shorter for guests.
+  const ttl = u.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
+  await store.touchSession(token, Date.now() + ttl);
+  return { user: u, token };
 }
 
 function blankAccount() {
@@ -492,7 +519,8 @@ async function bootstrapUser(base) {
   await store.createUser(user);
   await store.setAccount(user.id, blankAccount());
   const token = auth.newToken();
-  await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL });
+  const ttl = user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
+  await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + ttl, lastSeenAt: Date.now() });
   return { token, user };
 }
 
@@ -506,12 +534,13 @@ async function handleAuth(req, res, sub, body) {
   // POST /api/auth/register|login|guest|logout|change-password ; GET /api/auth/me
   if (sub === 'register' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
-    if (!auth.emailOk(b.email)) return sendJSON(res, 400, { error: 'Enter a valid email address' });
+    const email = auth.normalizeEmail(b.email);
+    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address' });
     if (!auth.passwordOk(b.password)) return sendJSON(res, 400, { error: 'Password must be at least 8 characters' });
     if (!b.acceptedTerms) return sendJSON(res, 400, { error: 'You must accept the Terms & Privacy Policy' });
-    if (await store.getUserByEmail(b.email)) return sendJSON(res, 409, { error: 'An account with that email already exists' });
+    if (await store.getUserByEmail(email)) return sendJSON(res, 409, { error: 'An account with that email already exists' });
     const { token, user } = await bootstrapUser({
-      isGuest: false, email: String(b.email).toLowerCase(), name: (b.name || '').trim() || String(b.email).split('@')[0],
+      isGuest: false, email, name: (b.name || '').trim() || email.split('@')[0],
       phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
     });
     log('info', 'registered ' + user.email);
@@ -519,10 +548,29 @@ async function handleAuth(req, res, sub, body) {
   }
   if (sub === 'login' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
-    const u = await store.getUserByEmail(b.email || '');
-    if (!u || u.isGuest || !auth.verifyPassword(b.password || '', u.passwordHash)) return sendJSON(res, 401, { error: 'Incorrect email or password' });
+    const email = auth.normalizeEmail(b.email);
+    const password = typeof b.password === 'string' ? b.password : '';
+    const rateKey = clientKey(req) + '|' + email;
+    if (!allowLoginAttempt(rateKey)) {
+      return sendJSON(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.' });
+    }
+    if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address' });
+    if (!password) return sendJSON(res, 400, { error: 'Enter your password' });
+
+    const u = await store.getUserByEmail(email);
+    // Only existing registered accounts may sign in — never auto-create, never guests.
+    if (!u || u.isGuest || !auth.isRegisteredUser(u)) {
+      return sendJSON(res, 401, { error: 'No StatVibe account found for that email. Please register first.' });
+    }
+    if (!auth.verifyPassword(password, u.passwordHash)) {
+      return sendJSON(res, 401, { error: 'Incorrect email or password' });
+    }
+    clearLoginAttempts(rateKey);
     const token = auth.newToken();
-    await store.createSession({ token, userId: u.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL });
+    await store.createSession({
+      token, userId: u.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL, lastSeenAt: Date.now(),
+    });
+    log('info', 'login ' + u.email);
     return sessionPayload(res, 200, token, u);
   }
   if (sub === 'guest' && req.method === 'POST') {
@@ -545,7 +593,9 @@ async function handleAuth(req, res, sub, body) {
     await store.updateUser(user.id, { passwordHash: auth.hashPassword(b.newPassword) });
     await store.deleteSessionsForUser(user.id); // force re-login elsewhere
     const nt = auth.newToken();
-    await store.createSession({ token: nt, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL });
+    await store.createSession({
+      token: nt, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL, lastSeenAt: Date.now(),
+    });
     return sendJSON(res, 200, { ok: true, token: nt });
   }
   return sendJSON(res, 404, { error: 'Unknown auth endpoint' });
