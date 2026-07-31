@@ -43,6 +43,9 @@ export default defineConfig({
   root: 'public',
   publicDir: false,
   plugins: [localApiPlugin(), copyPublicShellPlugin()],
+  server: {
+    fs: { allow: [path.resolve('.'), path.resolve('lib')] },
+  },
   build: {
     outDir: '../dist',
     emptyOutDir: true,

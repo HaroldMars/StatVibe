@@ -5,6 +5,7 @@ import {
   esc, money, currency, calcSummary, hasStatInputs, statNum, bizName, userName,
   initials, convAvatar, relTime,
 } from '../utils.js';
+import { computeRetail, computeProduct } from '../calc-math.js';
 
 export const tabScreens = {};
 export const screens = {};
@@ -46,7 +47,7 @@ export function statsCard() {
   const last = points[points.length - 1].split(',');
   const area = `M${first[0]},92 L${points.join(' L')} L${last[0]},92 Z`;
   const cs = calcSummary();
-  const askQ = `Analyze my business. Stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail suggested price ${money(cs.price)} at ${cs.margin.toFixed(1)}% margin (markup ${cs.markup}%), Product landed cost ${money(cs.landed)} (unit ${money(state.calc.unitCost)} + freight ${money(state.calc.freight)} + overhead ${money(state.calc.overhead)}), Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
+  const askQ = `Analyze my business. Stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
   return `
     <div class="card mb-12" style="padding:16px 16px 14px;cursor:pointer" data-act="goto" data-s="revenue">
       <div class="row-between mb-8">
@@ -74,13 +75,13 @@ export function statsCard() {
       <div class="grid-3">
         <div>
           <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Retail</div>
-          <div class="big-num" style="font-size:16px">${money(cs.price)}</div>
-          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">${cs.margin.toFixed(1)}% margin</div>
+          <div class="big-num" style="font-size:16px">${money(cs.retail.price)}</div>
+          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">${cs.retail.markup}% markup · ${cs.retail.margin.toFixed(1)}% gm</div>
         </div>
         <div>
           <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Product</div>
-          <div class="big-num" style="font-size:16px">${money(cs.landed)}</div>
-          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">Landed cost</div>
+          <div class="big-num" style="font-size:16px">${money(cs.product.price)}</div>
+          <div style="font-size:10.5px;color:var(--muted-2);margin-top:2px">${cs.product.targetMargin}% target · cost ${money(cs.product.cost)}</div>
         </div>
         <div>
           <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:4px">Supply</div>
@@ -94,7 +95,7 @@ export function statsCard() {
         ${I.spark('#7FE3C8', 15, true)}
         <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Stats insight</span>
       </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>. Calc suggests retail at <b style="color:#fff">${money(cs.price)}</b> (${cs.margin.toFixed(1)}% margin) with supply of <b style="color:#fff">${cs.onHand.toLocaleString()}</b>.</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>. Retail markup prices at <b style="color:#fff">${money(cs.retail.price)}</b>; product margin pricing at <b style="color:#fff">${money(cs.product.price)}</b>; supply of <b style="color:#fff">${cs.onHand.toLocaleString()}</b>.</div>
       <div class="insight-actions">
         <button class="btn sm mint" data-act="editStatsInputs">Edit stats</button>
         <button class="btn sm" data-act="askAI" data-q="${esc(askQ)}" style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
@@ -125,14 +126,36 @@ tabScreens.stats = () => `
 
 tabScreens.calc = () => {
   const c = state.calc;
-  const landed = c.unitCost + c.freight + c.overhead;
-  const price = landed / (1 - c.markup / 100);
-  const margin = ((price - landed) / price) * 100;
   const t = c.tab;
+  const retail = computeRetail(c);
+  const product = computeProduct(c);
+  const active = t === 'Product' ? product : retail;
+  const costLabel = t === 'Product' ? 'Total product cost' : 'Landed cost';
+  const priceLabel = t === 'Product' ? 'Suggested sell price' : 'Suggested retail price';
+  const secondaryLabel = t === 'Product' ? 'Gross margin' : 'Gross margin';
+  const secondaryValue = `${active.margin.toFixed(1)}%`;
+  const fields = t === 'Product'
+    ? [
+      ['Materials / COGS', 'unitCost', true],
+      ['Labor / assembly', 'freight', true],
+      ['Overhead', 'overhead', true],
+      ['Target gross margin', 'targetMargin', false],
+    ]
+    : [
+      ['Unit cost', 'unitCost', true],
+      ['Freight + duty', 'freight', true],
+      ['Overhead allocation', 'overhead', true],
+      ['Target markup', 'markup', false],
+    ];
+  const hint = t === 'Product'
+    ? `Product mode sets price from a <b>target gross margin</b>. Cost ${money(active.cost)} → price ${money(active.price)} (profit ${money(active.profit)}/unit · implied markup ${active.markup.toFixed(1)}%).`
+    : `Retail mode marks up cost: price = cost × (1 + markup%). Cost ${money(active.cost)} + ${active.markup}% markup → ${money(active.price)} (profit ${money(active.profit)}/unit).`;
+  const skuLine = t === 'Product' ? 'Product economics · build & sell' : 'Retail shelf pricing · SKU TH-402';
+
   return `
   <div class="scroll pad">
     <div class="row-between mb-14">
-      <div><div class="h-page">Calculator</div><div class="sub">Pricing · Margin · Supply</div></div>
+      <div><div class="h-page">Calculator</div><div class="sub">Retail markup · Product margin · Supply</div></div>
       <button class="iconbtn accent" data-act="addItem" title="Add product">${I.plus('#fff')}</button>
     </div>
     <div class="segmented mb-14" data-seg="calc">
@@ -141,20 +164,37 @@ tabScreens.calc = () => {
 
     ${t !== 'Supply' ? `
     <div class="card mb-12">
-      <div style="font-size:12px;color:var(--muted-2);margin-bottom:10px">Trailhead Jacket · SKU TH-402</div>
-      ${[['Unit cost', 'unitCost'], ['Freight + duty', 'freight'], ['Overhead allocation', 'overhead']]
-        .map(([lab, key]) => `<div class="row-between" style="padding:9px 0;border-bottom:1px solid var(--hairline)"><span style="font-size:13px">${lab}</span><span class="flex items-center" style="gap:2px"><span class="mono" style="font-size:14px">${esc(currency().symbol)}</span><input class="mono calc-input" data-k="${key}" value="${c[key].toFixed(2)}" inputmode="decimal" style="width:64px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/></span></div>`).join('')}
-      <div class="row-between" style="padding:11px 0 2px"><span style="font-size:13px">Target markup</span><span class="flex items-center" style="gap:2px"><input class="mono calc-input" data-k="markup" value="${c.markup}" inputmode="decimal" style="width:44px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/><span class="mono" style="font-size:14px">%</span></span></div>
+      <div style="font-size:12px;color:var(--muted-2);margin-bottom:10px">${skuLine}</div>
+      ${fields.map(([lab, key, moneyField]) => {
+        const raw = Number(c[key]);
+        const shown = moneyField ? raw.toFixed(2) : String(raw);
+        return `<div class="row-between" style="padding:9px 0;border-bottom:1px solid var(--hairline)"><span style="font-size:13px">${lab}</span><span class="flex items-center" style="gap:2px">${moneyField ? `<span class="mono" style="font-size:14px">${esc(currency().symbol)}</span>` : ''}<input class="mono calc-input" data-k="${key}" value="${shown}" inputmode="decimal" style="width:${moneyField ? 64 : 44}px;border:none;background:none;text-align:right;font-size:14px;font-weight:500;outline:none;color:var(--ink);border-bottom:1px dashed var(--line-2)"/>${moneyField ? '' : '<span class="mono" style="font-size:14px">%</span>'}</span></div>`;
+      }).join('')}
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:12px">${hint}</div>
     </div>
 
-    <div class="card dark mb-12" style="padding:15px 16px">
+    <div class="card dark mb-12" style="padding:15px 16px" data-calc-result="${t}">
       <div class="row-between" style="align-items:flex-end;margin-bottom:12px">
-        <div><div class="eyebrow" style="color:var(--mint);margin-bottom:4px">Suggested price</div><div class="big-num" style="font-size:32px">${money(price)}</div></div>
-        <div style="text-align:right"><div style="font-size:11px;color:#9FBAB2;margin-bottom:4px">Gross margin</div><div class="big-num" style="font-size:24px;color:var(--mint)">${margin.toFixed(1)}%</div></div>
+        <div><div class="eyebrow" style="color:var(--mint);margin-bottom:4px">${priceLabel}</div><div class="big-num" style="font-size:32px" data-calc="price">${money(active.price)}</div></div>
+        <div style="text-align:right"><div style="font-size:11px;color:#9FBAB2;margin-bottom:4px">${secondaryLabel}</div><div class="big-num" style="font-size:24px;color:var(--mint)" data-calc="margin">${secondaryValue}</div></div>
       </div>
-      <div class="row-between" style="font-size:11px;color:#9FBAB2;margin-bottom:5px"><span>Landed cost ${money(landed)} · Target margin</span><span>${c.targetMargin}%</span></div>
-      <div class="meter" style="background:rgba(255,255,255,.12)"><i style="width:${Math.min(100, margin).toFixed(0)}%;background:var(--mint)"></i></div>
+      <div class="row-between" style="font-size:11px;color:#9FBAB2;margin-bottom:5px">
+        <span data-calc="cost-line">${costLabel} ${money(active.cost)} · Profit ${money(active.profit)}/unit</span>
+        <span data-calc="target-line">${t === 'Product' ? `Target ${active.targetMargin}%` : `Markup ${active.markup}%`}</span>
+      </div>
+      <div class="meter" style="background:rgba(255,255,255,.12)"><i data-calc="meter" style="width:${Math.min(100, active.margin).toFixed(0)}%;background:var(--mint)"></i></div>
+      <div class="grid-2" style="gap:8px;margin-top:12px">
+        <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:10px 11px">
+          <div style="font-size:10px;color:#9FBAB2;margin-bottom:3px">${t === 'Product' ? 'Implied markup' : 'Profit / unit'}</div>
+          <div class="big-num" style="font-size:16px;color:#EAF0EE" data-calc="extra">${t === 'Product' ? `${active.markup.toFixed(1)}%` : money(active.profit)}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:10px 11px">
+          <div style="font-size:10px;color:#9FBAB2;margin-bottom:3px">${t === 'Product' ? 'Profit / unit' : 'Vs product price'}</div>
+          <div class="big-num" style="font-size:16px;color:#EAF0EE" data-calc="compare">${t === 'Product' ? money(active.profit) : money(product.price)}</div>
+        </div>
+      </div>
       <button class="btn sm mint" data-act="calcAI" style="margin-top:12px">Ask AI to optimize this price</button>
+      <button class="btn sm" data-act="calcReset" style="margin-top:8px;background:rgba(255,255,255,.08);color:#EAF0EE">Reset inputs</button>
     </div>` : ''}
 
     ${t === 'Supply' ? inventoryView() : `
