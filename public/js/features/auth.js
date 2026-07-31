@@ -5,6 +5,13 @@ import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
 import { loadIdeas, loadHistory } from './ideas.js';
 import { loadConversations } from './messaging.js';
+import { maybeShowTutorial } from './tutorial.js';
+
+const PASSWORD_HINT = 'Use at least 8 characters with a letter and a number';
+
+function clientPasswordOk(p) {
+  return typeof p === 'string' && p.length >= 8 && /[A-Za-z]/.test(p) && /\d/.test(p);
+}
 
 function clearAuthFormError() {
   state.auth.formError = '';
@@ -24,6 +31,18 @@ export function goAuthScreen(screen) {
   state.auth.busy = false;
   state.stack = [{ screen, params: {} }];
   render();
+}
+
+async function enterAuthedApp({ toastMsg, preferStats = true } = {}) {
+  state.stack = [];
+  if (preferStats) state.tab = 'stats';
+  if (state.session.account && state.session.account.setupComplete) {
+    await Promise.all([loadIdeas(), loadHistory(), loadConversations()]);
+  }
+  render();
+  if (toastMsg) toast(toastMsg);
+  // First-time tutorial after setup is complete.
+  maybeShowTutorial();
 }
 
 export async function doGuest() {
@@ -50,7 +69,7 @@ export async function doRegister() {
 
   if (!name || name.length < 2) { setAuthFormError('Enter your full name', 'name_required'); render(); return; }
   if (!clientEmailOk(email)) { setAuthFormError('Enter a valid email address', 'invalid_email'); render(); return; }
-  if (!password || password.length < 8) { setAuthFormError('Password must be at least 8 characters', 'weak_password'); render(); return; }
+  if (!clientPasswordOk(password)) { setAuthFormError(PASSWORD_HINT, 'weak_password'); render(); return; }
   if (password !== password2) { setAuthFormError('Passwords do not match', 'password_mismatch'); render(); return; }
   if (!terms) { setAuthFormError('Please accept the Terms & Privacy Policy', 'terms_required'); render(); return; }
 
@@ -64,12 +83,13 @@ export async function doRegister() {
       body: { name, email, password, acceptedTerms: true },
     });
     if (status === 201 && data.user && !data.user.isGuest && data.token) {
+      // Instant session — user is signed in immediately and can use the app / log in again anytime.
       applySession(data, { remember: true });
       clearAuthFormError();
       state.auth.emailDraft = '';
       state.stack = [];
       render();
-      toast('Account created — set up your business');
+      toast('Account created — you are signed in');
       return;
     }
     setAuthFormError(data.error || 'Could not create account', data.code || '');
@@ -103,20 +123,20 @@ export async function doLogin() {
       applySession(data, { remember: true });
       clearAuthFormError();
       state.auth.emailDraft = '';
-      state.stack = [];
-      state.tab = 'stats';
-      if (state.session.account && state.session.account.setupComplete) {
-        await Promise.all([loadIdeas(), loadHistory(), loadConversations()]);
-      }
-      render();
-      toast('Welcome back');
+      await enterAuthedApp({
+        toastMsg: state.session.account && state.session.account.setupComplete ? 'Welcome back' : 'Signed in — finish setup',
+        preferStats: true,
+      });
       return;
     }
-    // Never enter the app without a verified registered session.
-    setAuthFormError(
-      data.error || 'Incorrect email or password',
-      data.code || (status === 401 ? 'invalid_credentials' : ''),
-    );
+    if (status === 0) {
+      setAuthFormError(data.error || 'No internet connection', 'offline');
+    } else {
+      setAuthFormError(
+        data.error || 'Incorrect email or password',
+        data.code || (status === 401 ? 'invalid_credentials' : ''),
+      );
+    }
     render();
   } finally {
     state.auth.busy = false;
@@ -131,13 +151,14 @@ export async function doLogout() {
   state.session = {
     token: null, user: null, account: null, inventory: [], ideas: [], history: [],
     conversations: [], unreadTotal: 0, currencies: curr, cloudinary: state.session.cloudinary,
-    loaded: true, restoring: false,
+    loaded: true, restoring: false, expiresAt: null,
   };
   state.authed = false;
   state.auth.remember = true;
   state.auth.busy = false;
   clearAuthFormError();
   state.auth.emailDraft = '';
+  state.tutorial = { open: false, step: -1 };
   state.stack = [];
   state.tab = 'stats';
   render();
@@ -160,19 +181,32 @@ export async function finishSetup() {
     businessName: d.businessName.trim(), industry: d.industry, currency: d.currency, teamSize: d.teamSize,
     sellsProducts: d.sellsProducts !== false, goals: d.goals || [],
   } });
-  if (status === 200) { state.session.account = data.account; state.stack = []; state.tab = d.sellsProducts !== false ? 'calc' : 'stats'; render(); toast("You're all set 🎉"); }
-  else toast(data.error || 'Setup failed');
+  if (status === 200) {
+    state.session.account = data.account;
+    state.stack = [];
+    state.tab = 'stats';
+    render();
+    toast("You're all set");
+    maybeShowTutorial();
+  } else toast(data.error || 'Setup failed');
 }
 
 export function changePasswordSheet() {
   openSheet(`<h3>Change password</h3>
     <div class="field" style="margin-top:12px"><label>Current password</label><div style="display:flex;gap:8px;align-items:center"><input id="cpCur" type="password" autocomplete="current-password" style="flex:1"/><button class="pill" type="button" data-act="togglePwd" data-target="cpCur">Show</button></div></div>
-    <div class="field"><label>New password · min 8 characters</label><div style="display:flex;gap:8px;align-items:center"><input id="cpNew" type="password" autocomplete="new-password" style="flex:1"/><button class="pill" type="button" data-act="togglePwd" data-target="cpNew">Show</button></div></div>
+    <div class="field"><label>New password · letter + number, min 8</label><div style="display:flex;gap:8px;align-items:center"><input id="cpNew" type="password" autocomplete="new-password" style="flex:1"/><button class="pill" type="button" data-act="togglePwd" data-target="cpNew">Show</button></div></div>
     <button class="btn" id="cpSave">Update password</button>`);
   setTimeout(() => { const b = document.getElementById('cpSave'); if (b) b.onclick = async () => {
     const currentPassword = (document.getElementById('cpCur') || {}).value, newPassword = (document.getElementById('cpNew') || {}).value;
+    if (!clientPasswordOk(newPassword)) { toast(PASSWORD_HINT); return; }
     const { status, data } = await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
-    if (status === 200) { if (data.token) { state.session.token = data.token; persistToken(data.token, true); } closeSheet(); toast('Password updated'); }
-    else toast(data.error || 'Could not update password');
+    if (status === 200) {
+      if (data.token) {
+        state.session.token = data.token;
+        persistToken(data.token, true, data.session && data.session.expiresAt);
+      }
+      closeSheet();
+      toast('Password updated');
+    } else toast(data.error || 'Could not update password');
   }; }, 30);
 }

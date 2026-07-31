@@ -481,6 +481,7 @@ async function getAuthUser(req) {
 function blankAccount() {
   return {
     setupComplete: false, businessName: null, industry: null, currency: 'USD', teamSize: null, goals: [], sellsProducts: true, plan: 'Free', createdAt: Date.now(),
+    tutorialDone: false, tutorialCompletedAt: null,
     statsDraft: { revenue: '', products: '', avgPrice: '' },
     calc: { tab: 'Retail', unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
     supply: { onHand: 0, reorder: 0, cover: 0 },
@@ -520,14 +521,20 @@ async function bootstrapUser(base) {
   await store.setAccount(user.id, blankAccount());
   const token = auth.newToken();
   const ttl = user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
-  await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + ttl, lastSeenAt: Date.now() });
-  return { token, user };
+  const expiresAt = Date.now() + ttl;
+  await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now() });
+  return { token, user, expiresAt };
 }
 
-async function sessionPayload(res, status, token, user) {
+async function sessionPayload(res, status, token, user, expiresAt) {
   const account = await store.getAccount(user.id);
   const inventory = await store.listInventory(user.id);
-  sendJSON(res, status, { token, user: auth.publicUser(user), account, inventory });
+  const sessionMeta = {
+    expiresAt: expiresAt || null,
+    ttlMs: user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL,
+    ttlDays: user.isGuest ? null : 30,
+  };
+  sendJSON(res, status, { token, user: auth.publicUser(user), account, inventory, session: sessionMeta });
 }
 
 async function handleAuth(req, res, sub, body) {
@@ -538,17 +545,20 @@ async function handleAuth(req, res, sub, body) {
     const name = (b.name || '').trim();
     if (!name || name.length < 2) return sendJSON(res, 400, { error: 'Enter your full name', code: 'name_required' });
     if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address', code: 'invalid_email' });
-    if (!auth.passwordOk(b.password)) return sendJSON(res, 400, { error: 'Password must be at least 8 characters', code: 'weak_password' });
+    if (!auth.passwordOk(b.password)) {
+      return sendJSON(res, 400, { error: auth.passwordHint, code: 'weak_password' });
+    }
     if (!b.acceptedTerms) return sendJSON(res, 400, { error: 'You must accept the Terms & Privacy Policy', code: 'terms_required' });
     if (await store.getUserByEmail(email)) {
+      log('info', 'register rejected — email taken: ' + email);
       return sendJSON(res, 409, { error: 'An account already exists with that email. Sign in instead.', code: 'email_taken' });
     }
-    const { token, user } = await bootstrapUser({
+    const { token, user, expiresAt } = await bootstrapUser({
       isGuest: false, email, name,
       phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
     });
-    log('info', 'registered ' + user.email);
-    return sessionPayload(res, 201, token, user);
+    log('info', 'registered ' + user.email + ' (session 30d, login-ready)');
+    return sessionPayload(res, 201, token, user, expiresAt);
   }
   if (sub === 'login' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON', code: 'invalid_json' });
@@ -556,6 +566,7 @@ async function handleAuth(req, res, sub, body) {
     const password = typeof b.password === 'string' ? b.password : '';
     const rateKey = clientKey(req) + '|' + email;
     if (!allowLoginAttempt(rateKey)) {
+      log('warn', 'login rate-limited: ' + email);
       return sendJSON(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.', code: 'rate_limited' });
     }
     if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address', code: 'invalid_email' });
@@ -564,46 +575,60 @@ async function handleAuth(req, res, sub, body) {
     const u = await store.getUserByEmail(email);
     // Same gate as Google / Meta / banking: only existing registered accounts can sign in.
     if (!u || u.isGuest || !auth.isRegisteredUser(u)) {
+      log('info', 'login failed — account not found: ' + email);
       return sendJSON(res, 401, {
         error: "Couldn't find a StatVibe account with that email. Create an account to continue.",
         code: 'account_not_found',
       });
     }
     if (!auth.verifyPassword(password, u.passwordHash)) {
+      log('info', 'login failed — bad password: ' + email);
       return sendJSON(res, 401, { error: 'Incorrect email or password', code: 'invalid_credentials' });
     }
     clearLoginAttempts(rateKey);
     const token = auth.newToken();
+    const expiresAt = Date.now() + SESSION_TTL;
     await store.createSession({
-      token, userId: u.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL, lastSeenAt: Date.now(),
+      token, userId: u.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
     });
-    log('info', 'login ' + u.email);
-    return sessionPayload(res, 200, token, u);
+    await store.updateUser(u.id, { lastLoginAt: Date.now() });
+    log('info', 'login ' + u.email + ' (session expires ' + new Date(expiresAt).toISOString() + ')');
+    return sessionPayload(res, 200, token, u, expiresAt);
   }
   if (sub === 'guest' && req.method === 'POST') {
-    const { token, user } = await bootstrapUser({ isGuest: true, name: 'Guest' });
-    return sessionPayload(res, 201, token, user);
+    const { token, user, expiresAt } = await bootstrapUser({ isGuest: true, name: 'Guest' });
+    log('info', 'guest session started ' + user.id);
+    return sessionPayload(res, 201, token, user, expiresAt);
   }
 
   // Authenticated below
   const authed = await getAuthUser(req);
-  if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  if (!authed) return sendJSON(res, 401, { error: 'Not signed in', code: 'not_signed_in' });
   const { user, token } = authed;
 
-  if (sub === 'me' && req.method === 'GET') return sessionPayload(res, 200, token, user);
-  if (sub === 'logout' && req.method === 'POST') { await store.deleteSession(token); return sendJSON(res, 200, { ok: true }); }
+  if (sub === 'me' && req.method === 'GET') {
+    const s = await store.getSession(token);
+    return sessionPayload(res, 200, token, user, s && s.expiresAt);
+  }
+  if (sub === 'logout' && req.method === 'POST') {
+    await store.deleteSession(token);
+    log('info', 'logout ' + (user.email || user.id));
+    return sendJSON(res, 200, { ok: true });
+  }
   if (sub === 'change-password' && req.method === 'POST') {
     if (user.isGuest) return sendJSON(res, 403, { error: 'Guest accounts have no password' });
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
     if (!auth.verifyPassword(b.currentPassword || '', user.passwordHash)) return sendJSON(res, 403, { error: 'Current password is incorrect' });
-    if (!auth.passwordOk(b.newPassword)) return sendJSON(res, 400, { error: 'New password must be at least 8 characters' });
+    if (!auth.passwordOk(b.newPassword)) return sendJSON(res, 400, { error: auth.passwordHint, code: 'weak_password' });
     await store.updateUser(user.id, { passwordHash: auth.hashPassword(b.newPassword) });
     await store.deleteSessionsForUser(user.id); // force re-login elsewhere
     const nt = auth.newToken();
+    const expiresAt = Date.now() + SESSION_TTL;
     await store.createSession({
-      token: nt, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL, lastSeenAt: Date.now(),
+      token: nt, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
     });
-    return sendJSON(res, 200, { ok: true, token: nt });
+    log('info', 'password changed ' + user.email);
+    return sendJSON(res, 200, { ok: true, token: nt, session: { expiresAt, ttlDays: 30 } });
   }
   return sendJSON(res, 404, { error: 'Unknown auth endpoint' });
 }
@@ -620,11 +645,27 @@ async function handleAccount(req, res, sub, body) {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
     if (!b.businessName || !String(b.businessName).trim()) return sendJSON(res, 400, { error: 'Business name is required' });
     const currency = CURRENCY_CODES.has(b.currency) ? b.currency : 'USD';
-    const acct = { ...(await store.getAccount(user.id) || blankAccount()), setupComplete: true,
+    const prev = await store.getAccount(user.id) || blankAccount();
+    const acct = { ...prev, setupComplete: true,
       businessName: String(b.businessName).trim(), industry: b.industry || null, currency,
-      teamSize: b.teamSize || null, goals: Array.isArray(b.goals) ? b.goals : [], sellsProducts: b.sellsProducts !== false };
+      teamSize: b.teamSize || null, goals: Array.isArray(b.goals) ? b.goals : [], sellsProducts: b.sellsProducts !== false,
+      // Fresh setup should see the first-run tutorial unless already completed.
+      tutorialDone: !!prev.tutorialDone,
+      tutorialCompletedAt: prev.tutorialCompletedAt || null,
+    };
     await store.setAccount(user.id, acct);
     if (!user.isGuest && b.ownerName) await store.updateUser(user.id, { name: String(b.ownerName).trim() });
+    log('info', 'setup complete ' + (user.email || user.id));
+    return sendJSON(res, 200, { ok: true, account: acct });
+  }
+  if (sub === 'tutorial' && req.method === 'POST') {
+    const b = parseJSON(body) || {};
+    const acct = await store.getAccount(user.id) || blankAccount();
+    acct.tutorialDone = true;
+    acct.tutorialCompletedAt = Date.now();
+    acct.tutorialAction = b.action === 'skip' ? 'skip' : 'complete';
+    await store.setAccount(user.id, acct);
+    log('info', 'tutorial ' + acct.tutorialAction + ' ' + (user.email || user.id));
     return sendJSON(res, 200, { ok: true, account: acct });
   }
   if (sub === '' && req.method === 'PATCH') {
