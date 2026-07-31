@@ -53,7 +53,7 @@ screens.register = () => `
     <form id="registerForm" autocomplete="on">
       <div class="field"><label for="regName">Full name</label><input id="regName" name="name" type="text" placeholder="Sam Rivera" autocomplete="name" required minlength="2" /></div>
       <div class="field"><label for="regEmail">Email</label><input id="regEmail" name="email" type="email" placeholder="you@business.com" autocomplete="email" required value="${esc(state.auth.emailDraft || '')}" /></div>
-      <div class="field"><label for="regPwd">Password <span style="color:var(--muted-3);font-weight:400">· at least 8 characters</span></label>
+      <div class="field"><label for="regPwd">Password <span style="color:var(--muted-3);font-weight:400">· letter + number, min 8</span></label>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="regPwd" name="password" type="password" placeholder="••••••••" autocomplete="new-password" style="flex:1" required minlength="8" />
           <button class="pill" type="button" data-act="togglePwd" data-target="regPwd">Show</button>

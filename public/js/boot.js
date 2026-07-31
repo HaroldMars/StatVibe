@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { STORAGE, api, applySession, clearTokenStorage } from './api.js';
+import { STORAGE, api, applySession, clearTokenStorage, storedSessionStillValid } from './api.js';
 import { loadStatsDraft } from './utils.js';
 import { applyTheme } from './theme.js';
 import { go, render, currentScreen } from './router.js';
@@ -7,6 +7,7 @@ import { loadModels } from './features/ai.js';
 import { loadIdeas, loadHistory } from './features/ideas.js';
 import { loadConversations, refreshChat } from './features/messaging.js';
 import { setInstallPrompt } from './features/account.js';
+import { maybeShowTutorial } from './features/tutorial.js';
 
 export function applyMobileEnv() {
   const root = document.documentElement;
@@ -48,6 +49,13 @@ export async function boot() {
     else tok = sessionStorage.getItem(STORAGE.SESSION_TOKEN);
   } catch { /* ignore */ }
 
+  // Client-side expiry gate for 30-day auto-login (server still validates).
+  if (tok && fromLocal && !storedSessionStillValid()) {
+    clearTokenStorage();
+    tok = null;
+    fromLocal = false;
+  }
+
   // Logo splash only when a previous session exists; otherwise skip straight to welcome.
   state.session.restoring = !!tok;
   state.session.loaded = !tok;
@@ -88,6 +96,8 @@ export async function boot() {
   state.session.loaded = true;
   render();
   if (location.hash) applyHash();
+  // Auto-login into a set-up account may still need the first-run tutorial.
+  maybeShowTutorial();
 }
 
 export function startApp() {

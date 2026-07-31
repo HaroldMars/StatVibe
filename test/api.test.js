@@ -179,35 +179,45 @@ let userToken = null;
 test('register validates email, password, and terms', async () => {
   assert.equal((await req('POST', '/api/auth/register', { body: { email: 'bad', password: 'x', acceptedTerms: true, name: 'A' } })).status, 400);
   assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'short', acceptedTerms: true, name: 'Ada' } })).status, 400);
-  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough', acceptedTerms: false, name: 'Ada' } })).status, 400);
-  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough', acceptedTerms: true, name: '' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough1', acceptedTerms: false, name: 'Ada' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/register', { body: { email: 'a@b.co', password: 'longenough1', acceptedTerms: true, name: '' } })).status, 400);
 });
 
 test('register creates a blank account and never returns the password hash', async () => {
-  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret', name: 'Test Owner', acceptedTerms: true } });
+  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret1', name: 'Test Owner', acceptedTerms: true } });
   assert.equal(r.status, 201);
   assert.ok(r.json.token);
   assert.equal('passwordHash' in r.json.user, false, 'hash not exposed');
   assert.ok(r.json.user.tag && r.json.user.tag.startsWith('SV-'));
   assert.equal(r.json.account.setupComplete, false, 'blank account');
+  assert.equal(r.json.account.tutorialDone, false, 'tutorial pending');
+  assert.ok(r.json.session && r.json.session.expiresAt, '30-day session expiry returned');
+  assert.equal(r.json.session.ttlDays, 30);
   userToken = r.json.token;
 });
 
 test('duplicate email → 409', async () => {
-  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret', name: 'Other', acceptedTerms: true } });
+  const r = await req('POST', '/api/auth/register', { body: { email: 'owner@test.co', password: 'supersecret1', name: 'Other', acceptedTerms: true } });
   assert.equal(r.status, 409);
   assert.equal(r.json.code, 'email_taken');
+});
+
+test('register rejects passwords without a letter and number', async () => {
+  const r = await req('POST', '/api/auth/register', { body: { email: 'weak@test.co', password: 'onlyletters', name: 'Weak', acceptedTerms: true } });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.code, 'weak_password');
 });
 
 test('login rejects wrong password, accepts correct', async () => {
   const wrong = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'wrong' } });
   assert.equal(wrong.status, 401);
   assert.equal(wrong.json.code, 'invalid_credentials');
-  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
+  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret1' } });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.token);
   assert.equal(ok.json.user.isGuest, false);
   assert.equal(ok.json.user.email, 'owner@test.co');
+  assert.ok(ok.json.session && ok.json.session.expiresAt);
 });
 
 test('login rejects unregistered email and empty credentials', async () => {
@@ -221,7 +231,7 @@ test('login rejects unregistered email and empty credentials', async () => {
 });
 
 test('login session lasts ~30 days and /auth/me restores it', async () => {
-  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
+  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret1' } });
   assert.equal(ok.status, 200);
   const me = await req('GET', '/api/auth/me', { headers: auth(ok.json.token) });
   assert.equal(me.status, 200);
@@ -252,6 +262,16 @@ test('account setup requires business name and validates currency', async () => 
   assert.equal(r.status, 200);
   assert.equal(r.json.account.setupComplete, true);
   assert.equal(r.json.account.currency, 'PHP');
+  assert.equal(r.json.account.tutorialDone, false);
+});
+
+test('tutorial can be skipped or completed and then stays done', async () => {
+  const skip = await req('POST', '/api/account/tutorial', { headers: auth(userToken), body: { action: 'skip' } });
+  assert.equal(skip.status, 200);
+  assert.equal(skip.json.account.tutorialDone, true);
+  assert.equal(skip.json.account.tutorialAction, 'skip');
+  const me = await req('GET', '/api/auth/me', { headers: auth(userToken) });
+  assert.equal(me.json.account.tutorialDone, true);
 });
 
 test('account PATCH persists statsDraft and calc for the session', async () => {
@@ -311,18 +331,18 @@ test('inventory update + delete', async () => {
 });
 
 test('change password requires correct current password', async () => {
-  assert.equal((await req('POST', '/api/auth/change-password', { headers: auth(userToken), body: { currentPassword: 'nope', newPassword: 'brandnewpass' } })).status, 403);
-  const ok = await req('POST', '/api/auth/change-password', { headers: auth(userToken), body: { currentPassword: 'supersecret', newPassword: 'brandnewpass' } });
+  assert.equal((await req('POST', '/api/auth/change-password', { headers: auth(userToken), body: { currentPassword: 'nope', newPassword: 'brandnewpass1' } })).status, 403);
+  const ok = await req('POST', '/api/auth/change-password', { headers: auth(userToken), body: { currentPassword: 'supersecret1', newPassword: 'brandnewpass1' } });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.token, 'issues a fresh session token');
 });
 
 test('delete account removes it (login then fails)', async () => {
-  const login = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'brandnewpass' } });
+  const login = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'brandnewpass1' } });
   assert.equal(login.status, 200);
   const del = await req('DELETE', '/api/account', { headers: auth(login.json.token) });
   assert.equal(del.status, 200);
-  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'brandnewpass' } })).status, 401);
+  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'brandnewpass1' } })).status, 401);
 });
 
 // --- Developer console: separate admin app with real accounts ---

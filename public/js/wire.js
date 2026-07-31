@@ -17,6 +17,9 @@ import {
 import {
   doGuest, doRegister, doLogin, doLogout, captureSetup, finishSetup, changePasswordSheet, goAuthScreen,
 } from './features/auth.js';
+import {
+  tutorialStart, tutorialNext, tutorialPrev, tutorialSkip, tutorialFinish,
+} from './features/tutorial.js';
 import { addItemSheet, predictItem, itemMenu, updateCalc } from './features/inventory.js';
 import {
   downloadSheet, exportData, qrSheet, paymentSheet, deleteAccountConfirm,
@@ -74,6 +77,11 @@ export function bindClicks(root) {
         break;
       }
       case 'logout': doLogout(); break;
+      case 'tutorialStart': tutorialStart(); break;
+      case 'tutorialNext': tutorialNext(); break;
+      case 'tutorialPrev': tutorialPrev(); break;
+      case 'tutorialSkip': tutorialSkip(); break;
+      case 'tutorialFinish': tutorialFinish(); break;
       // setup wizard
       case 'suSells': captureSetup(); state.setupDraft.sellsProducts = t.dataset.v === 'yes'; render(); break;
       case 'suGoal': { captureSetup(); const g = new Set(state.setupDraft.goals || []); g.has(t.dataset.v) ? g.delete(t.dataset.v) : g.add(t.dataset.v); state.setupDraft.goals = [...g]; render(); break; }

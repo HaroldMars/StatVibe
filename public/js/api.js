@@ -1,25 +1,47 @@
 import { state } from './state.js';
 import { applyWorkspaceFromAccount } from './utils.js';
 
-export const STORAGE = { LOCAL_TOKEN: 'sv_token', SESSION_TOKEN: 'sv_session_token', THEME: 'sv_theme' };
+export const STORAGE = {
+  LOCAL_TOKEN: 'sv_token',
+  SESSION_TOKEN: 'sv_session_token',
+  TOKEN_EXPIRES: 'sv_token_expires',
+  THEME: 'sv_theme',
+};
+
 /** Persist a real-account token for up to 30 days (server also enforces expiry). Guests stay tab-only. */
-export function persistToken(token, remember) {
+export function persistToken(token, remember, expiresAt) {
   try {
     if (remember) {
       localStorage.setItem(STORAGE.LOCAL_TOKEN, token);
       sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
+      if (expiresAt) localStorage.setItem(STORAGE.TOKEN_EXPIRES, String(expiresAt));
+      else localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
     } else {
       sessionStorage.setItem(STORAGE.SESSION_TOKEN, token);
       localStorage.removeItem(STORAGE.LOCAL_TOKEN);
+      localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
     }
   } catch { /* ignore */ }
 }
+
 export function clearTokenStorage() {
   try {
     localStorage.removeItem(STORAGE.LOCAL_TOKEN);
     sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
+    localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
     localStorage.removeItem('sv_remember');
   } catch { /* ignore */ }
+}
+
+/** Returns false if a stored expiry timestamp is in the past. */
+export function storedSessionStillValid() {
+  try {
+    const raw = localStorage.getItem(STORAGE.TOKEN_EXPIRES);
+    if (!raw) return true; // unknown expiry — let the server decide
+    const exp = Number(raw);
+    if (!Number.isFinite(exp)) return true;
+    return exp > Date.now();
+  } catch { return true; }
 }
 
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
@@ -28,7 +50,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   if (auth && state.session.token) headers['Authorization'] = 'Bearer ' + state.session.token;
   let r;
   try { r = await fetch('/api' + path, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
-  catch (e) { return { status: 0, data: { error: 'Network error' } }; }
+  catch (e) { return { status: 0, data: { error: 'No internet connection. Check your network and try again.', code: 'offline' } }; }
   let data = {}; try { data = await r.json(); } catch { /* no body */ }
   return { status: r.status, data };
 }
@@ -38,9 +60,11 @@ export function applySession(data, opts = {}) {
   const isGuest = !!data.user.isGuest;
   // Real accounts always persist to localStorage; guests are tab-only and never "remembered".
   const remember = opts.remember != null ? !!opts.remember && !isGuest : !isGuest;
+  const expiresAt = data.session && data.session.expiresAt;
   if (data.token) {
     state.session.token = data.token;
-    if (opts.persist !== false) persistToken(data.token, remember);
+    state.session.expiresAt = expiresAt || null;
+    if (opts.persist !== false) persistToken(data.token, remember, expiresAt);
   }
   state.session.user = data.user;
   state.profile.name = data.user.name || state.profile.name;
