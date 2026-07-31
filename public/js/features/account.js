@@ -219,7 +219,7 @@ function pollPaymongo(intentId, plan) {
       if (data.usage) {
         state.usage = {
           used: data.usage.used || 0,
-          limit: data.usage.limit || 1000,
+          limit: data.usage.limit || 50000,
           resetDays: data.usage.resetDays,
           resetAt: data.usage.resetAt,
           period: data.usage.period || 'month',

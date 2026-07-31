@@ -67,7 +67,7 @@ screens.alerts = () => {
     { grp: 'Today', icon: '✨', tint: 'var(--teal-tint)', title: 'Forecast beat plan', body: 'Q3 projected at $2.41M — 6.8% over plan.', time: '18m ago', unread: true },
     { grp: 'Today', icon: '⚠️', tint: 'var(--red-tint)', title: 'Low stock — Summit Pack 40L', body: 'Below reorder point. 6 days of cover left.', time: '1h ago', unread: true },
     { grp: 'Today', icon: '💬', tint: 'var(--slate-blue-tint)', title: 'Meridian Retail replied', body: '"Perfect, send the PO" — AgentTech ready.', time: '2h ago', unread: false, act: 'agent' },
-    { grp: 'Earlier', icon: '⏳', tint: 'var(--amber-tint)', title: 'Free plan weekly limit', body: 'Free AI actions reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
+    { grp: 'Earlier', icon: '⏳', tint: 'var(--amber-tint)', title: 'Free plan weekly tokens', body: 'Free AI tokens reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
   ]);
   const groups = [...new Set(A.map((a) => a.grp))];
   return `
@@ -285,7 +285,7 @@ screens.admin = () => {
 
 screens.plans = () => {
   const u = state.usage;
-  const limit = u.limit || 1000;
+  const limit = u.limit || 50000;
   const used = u.used || 0;
   const pct = Math.min(100, Math.round((used / limit) * 100));
   const period = u.period === 'month' ? 'month' : 'week';
@@ -293,10 +293,10 @@ screens.plans = () => {
     ? 'no reset needed'
     : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
   const plans = [
-    { name: 'Free', price: '₱0', desc: '1,000 AI actions per week · core dashboard & calculator · weekly reset' },
-    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '10,000 AI actions / month · 3 workspaces · project hub · PayMongo QR' },
-    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '50,000 AI actions / month · all models & Blend · AgentTech · forecasting · PayMongo QR' },
-    { name: 'Enterprise', price: 'Custom', desc: 'Unlimited usage · SSO · audit logs · dedicated support & SLAs' },
+    { name: 'Free', price: '₱0', desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub · PayMongo QR' },
+    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting · PayMongo QR' },
+    { name: 'Enterprise', price: 'Custom', desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
   ];
   return `
   ${appbar('Plans')}
@@ -305,7 +305,7 @@ screens.plans = () => {
     <div class="card mb-14">
       <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this ${period}</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
       <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
-      <div style="font-size:11px;color:var(--muted-2)">${used.toLocaleString()} / ${limit.toLocaleString()} AI actions · ${resetLabel}</div>
+      <div style="font-size:11px;color:var(--muted-2)">${used.toLocaleString()} / ${limit.toLocaleString()} AI tokens · ${resetLabel}</div>
       ${pct >= 100 ? `<button class="btn sm mint" data-act="goto" data-s="plans" style="margin-top:12px">Upgrade to keep using AI</button>` : ''}
     </div>
     <div class="stack gap-10">

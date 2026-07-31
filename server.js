@@ -11,7 +11,7 @@ const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
 const aiLib = require('./lib/ai');
 const paymongo = require('./lib/paymongo');
-const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, consume: consumeUsage } = usageLib;
+const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 
 // Load .env (if present) into process.env before reading any config. Minimal,
 // dependency-free parser: `KEY=value`, `#` comments, optional quotes. Existing
@@ -243,11 +243,11 @@ async function handleModels(res) {
 }
 
 async function handleChat(req, res, body) {
-  // Metered AI requires a signed-in account so Free weekly limits can be enforced.
+  // Metered AI requires a signed-in account so Free weekly token limits can be enforced.
   const authed = await getAuthUser(req);
   if (!authed) {
     return sendJSON(res, 401, {
-      error: 'Sign in to use AI. Create a free account to get weekly AI actions.',
+      error: 'Sign in to use AI. Create a free account to get weekly AI tokens.',
       code: 'not_signed_in',
     });
   }
@@ -259,7 +259,7 @@ async function handleChat(req, res, body) {
   if (!rawMessages.length) return sendJSON(res, 400, { error: 'messages[] required' });
 
   let acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
-  const gate = consumeUsage(acct, 1);
+  const gate = canConsume(acct, 1);
   if (!gate.ok) {
     await store.setAccount(user.id, gate.account); // persist rolled period if any
     log('info', 'AI quota exceeded ' + (user.email || user.id) + ' plan=' + gate.account.plan);
@@ -271,46 +271,60 @@ async function handleChat(req, res, body) {
     });
   }
   acct = gate.account;
-  await store.setAccount(user.id, acct);
 
   metrics.chats++;
   const requested = payload.model;
-  const usage = usageView(acct);
 
   // Authoritative system prompt + business context so every answer targets the user's ask.
   const messages = aiLib.enrichMessages(rawMessages, { account: acct, user });
   const promptText = messages.map((m) => m.content).join('\n');
   const isCloud = CLOUD_MODELS.some((c) => c.id === requested);
 
-  async function respondLive(runner) {
-    const { model, content, usage: tokUsage, note } = await runner();
-    metrics.byModel[model] = (metrics.byModel[model] || 0) + 1;
-    recordUsage(model, tokUsage, promptText, content);
-    return sendJSON(res, 200, { simulated: false, model, content, note, usage });
+  async function finish(content, { model, simulated, note, tokUsage } = {}) {
+    const tokens = countMessageTokens(tokUsage, promptText, content);
+    if (tokUsage && (tokUsage.prompt_tokens || tokUsage.completion_tokens)) {
+      recordUsage(model, tokUsage, promptText, content);
+    } else {
+      recordTokens(model || 'simulated', promptText, content);
+    }
+    const billed = billTokens(acct, tokens);
+    acct = billed.account;
+    await store.setAccount(user.id, acct);
+    metrics.byModel[model || 'simulated'] = (metrics.byModel[model || 'simulated'] || 0) + 1;
+    return sendJSON(res, 200, {
+      simulated: !!simulated,
+      model: model || 'simulated',
+      content,
+      note,
+      usage: usageView(acct),
+      tokensBilled: tokens,
+    });
   }
 
   if (config.simulateOnly) {
     metrics.simulated++;
-    const content = simulate(messages);
-    recordTokens('simulated', promptText, content);
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content, usage });
+    return finish(simulate(messages), { model: 'simulated', simulated: true });
   }
 
   // Prefer real hosted/local AI over cloud-label simulation so answers stay accurate.
   if (isCloud && hostedConfigured()) {
     try {
-      return await respondLive(async () => {
-        const out = await callHostedAI(messages);
-        return { ...out, note: `${requested} routes through hosted AI for accurate answers.` };
+      const out = await callHostedAI(messages);
+      return finish(out.content, {
+        model: out.model,
+        simulated: false,
+        note: `${requested} routes through hosted AI for accurate answers.`,
+        tokUsage: out.usage,
       });
     } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI (cloud route): ' + e.message); }
   }
   if (isCloud) {
     metrics.simulated++;
-    const note = `${requested} is unavailable live — answering from the focused simulator.`;
-    const content = simulate(messages);
-    recordTokens(requested || 'simulated', promptText, content);
-    return sendJSON(res, 200, { simulated: true, model: requested || 'simulated', content, note, usage });
+    return finish(simulate(messages), {
+      model: requested || 'simulated',
+      simulated: true,
+      note: `${requested} is unavailable live — answering from the focused simulator.`,
+    });
   }
 
   const local = await listOllamaModels();
@@ -322,11 +336,12 @@ async function handleChat(req, res, body) {
   if (!model) {
     if (hostedConfigured()) {
       try {
-        return await respondLive(async () => callHostedAI(messages));
+        const out = await callHostedAI(messages);
+        return finish(out.content, { model: out.model, simulated: false, tokUsage: out.usage });
       } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
     }
     metrics.simulated++;
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), usage });
+    return finish(simulate(messages), { model: 'simulated', simulated: true });
   }
 
   try {
@@ -335,25 +350,22 @@ async function handleChat(req, res, body) {
     });
     if (status !== 200) throw new Error('Ollama status ' + status);
     const parsed = JSON.parse(rb);
-    metrics.byModel[model] = (metrics.byModel[model] || 0) + 1;
     const content = parsed.message ? parsed.message.content : (parsed.response || '');
-    if (parsed.prompt_eval_count || parsed.eval_count) {
-      const p = parsed.prompt_eval_count || 0, c = parsed.eval_count || 0;
-      metrics.tokens.total += p + c; metrics.tokens.prompt += p; metrics.tokens.completion += c;
-      const mm = (metrics.tokens.byModel[model] ||= { prompt: 0, completion: 0, total: 0 });
-      mm.prompt += p; mm.completion += c; mm.total += p + c;
-    } else { recordTokens(model, promptText, content); }
-    return sendJSON(res, 200, { simulated: false, model, content, usage });
+    const tokUsage = (parsed.prompt_eval_count || parsed.eval_count)
+      ? { prompt_tokens: parsed.prompt_eval_count || 0, completion_tokens: parsed.eval_count || 0 }
+      : null;
+    return finish(content, { model, simulated: false, tokUsage });
   } catch (e) {
     metrics.aiErrors++;
     if (hostedConfigured()) {
       try {
-        return await respondLive(async () => callHostedAI(messages));
+        const out = await callHostedAI(messages);
+        return finish(out.content, { model: out.model, simulated: false, tokUsage: out.usage });
       } catch (e2) { metrics.aiErrors++; log('warn', 'hosted AI after ollama fail: ' + e2.message); }
     }
     metrics.simulated++;
     log('warn', 'chat fallback: ' + e.message);
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), note: String(e.message || e), usage });
+    return finish(simulate(messages), { model: 'simulated', simulated: true, note: String(e.message || e) });
   }
 }
 
@@ -839,7 +851,7 @@ async function handleAccount(req, res, sub, body) {
           ok: true,
           account: upgraded.account,
           payment: await store.findPaymentBySourceId(intentId),
-          usageLimit: PLAN_LIMITS[plan] || 1000,
+          usageLimit: PLAN_LIMITS[plan] || PLAN_LIMITS.Free,
           usage: upgraded.usage,
         });
       } catch (e) {
@@ -873,7 +885,7 @@ async function handleAccount(req, res, sub, body) {
       ok: true,
       account: normalized,
       payment,
-      usageLimit: PLAN_LIMITS[plan] || 1000,
+      usageLimit: PLAN_LIMITS[plan] || PLAN_LIMITS.Free,
       usage: usageView(normalized),
     });
   }
