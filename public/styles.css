@@ -1,28 +1,27 @@
 /* ==========================================================================
-   StatVibe — Slate Ledger design system
-   Light, hairline-precise, tabular. IBM Plex + mono numerals, one teal accent.
-   Ported from the Claude Design spec (direction 1a).
+   StatVibe — playful mobile-first system
+   Pet-style rounded surfaces, brighter accents, app-like install experience.
    ========================================================================== */
 
 :root {
-  --bg: #f4f4f1;
+  --bg: #f6f7ff;
   --surface: #ffffff;
-  --ink: #14171c;
-  --ink-2: #2a2f36;
-  --muted: #5c6169;
-  --muted-2: #8a9099;
-  --muted-3: #9aa0a8;
-  --line: rgba(17, 20, 24, 0.08);
-  --line-2: rgba(17, 20, 24, 0.12);
-  --hairline: rgba(17, 20, 24, 0.07);
+  --ink: #18213f;
+  --ink-2: #2f3c66;
+  --muted: #6270a2;
+  --muted-2: #8590bb;
+  --muted-3: #a1abd0;
+  --line: rgba(74, 98, 184, 0.12);
+  --line-2: rgba(74, 98, 184, 0.2);
+  --hairline: rgba(74, 98, 184, 0.11);
 
-  --teal: #0e7c66;
-  --teal-deep: #0e5c4b;
-  --teal-ink: #0e1b18;   /* dark teal cards */
-  --mint: #7fe3c8;
-  --teal-tint: #e7f2ee;
-  --teal-tint-2: #f0f7f4;
-  --teal-tint-border: #dcede6;
+  --teal: #5865f2;
+  --teal-deep: #3e4dd8;
+  --teal-ink: #1f2b63;
+  --mint: #a8e5ff;
+  --teal-tint: #eef0ff;
+  --teal-tint-2: #f6f7ff;
+  --teal-tint-border: #dfe4ff;
 
   --red: #c23b3b;
   --red-tint: #fbecec;
@@ -31,50 +30,58 @@
   --slate-blue: #3a6070;
   --slate-blue-tint: #e7eef0;
 
-  --track: #eeeeea;
-  --seg-bg: #e8e8e3;
-  --chip: #f3f3ef;
+  --track: #e8ecff;
+  --seg-bg: #e9edff;
+  --chip: #f2f4ff;
   --seg-active: #ffffff;
-  --toggle-off: #cfd3d6;
-  --desk: radial-gradient(1200px 700px at 50% -10%, #efeee9 0%, #e6e4de 60%, #e2e0da 100%);
-  --device-bg: #f2f2f7;
+  --toggle-off: #c6cef4;
+  --desk: radial-gradient(1200px 700px at 10% 0%, #f7f8ff 0%, #eff3ff 55%, #e6edff 100%);
+  --device-bg: #f6f8ff;
 
-  --r-card: 14px;
-  --r-chip: 12px;
-  --r-pill: 20px;
+  --r-card: 20px;
+  --r-chip: 14px;
+  --r-pill: 999px;
 
   --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 
-  --shadow-frame: 0 40px 80px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  --shadow-frame: 0 34px 78px rgba(67, 88, 176, 0.28), 0 0 0 1px rgba(120, 138, 209, 0.18);
+
+  /* iOS safe areas — keep bottom inset tiny so the tab bar has no white footer */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: 0px;
+  /* MIXED-style top: safe area + compact header gap only */
+  --top-chrome: calc(var(--safe-t) + 16px);
 }
 
 /* ---- Dark theme -------------------------------------------------------- */
 :root[data-theme="dark"] {
-  --bg: #0f1214;
-  --surface: #191d21;
-  --ink: #eef1f3;
-  --ink-2: #ced4d9;
-  --muted: #9aa4ab;
-  --muted-2: #7c858c;
-  --muted-3: #666e75;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-2: rgba(255, 255, 255, 0.15);
-  --hairline: rgba(255, 255, 255, 0.07);
-  --track: #262b30;
-  --seg-bg: #20252a;
-  --chip: #23282d;
-  --seg-active: #2d343a;
-  --toggle-off: #3a4249;
-  --teal-tint: #123027;
-  --teal-tint-2: #101f1a;
-  --teal-tint-border: #1d463a;
+  --bg: #0f142e;
+  --surface: #171e43;
+  --ink: #eef1ff;
+  --ink-2: #d8ddff;
+  --muted: #b2bbe8;
+  --muted-2: #98a3d4;
+  --muted-3: #7b87bb;
+  --line: rgba(183, 195, 255, 0.16);
+  --line-2: rgba(183, 195, 255, 0.26);
+  --hairline: rgba(183, 195, 255, 0.13);
+  --track: #212b5c;
+  --seg-bg: #212c62;
+  --chip: #202a5b;
+  --seg-active: #2c3a7d;
+  --toggle-off: #45508b;
+  --teal-tint: #1e2d67;
+  --teal-tint-2: #1b2757;
+  --teal-tint-border: #344694;
   --red-tint: #38201f;
   --amber-tint: #352b16;
   --slate-blue-tint: #1b272d;
-  --desk: radial-gradient(1200px 700px at 50% -10%, #12171a 0%, #0c0f11 60%, #090b0c 100%);
-  --device-bg: #000000;
-  --shadow-frame: 0 40px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --desk: radial-gradient(1200px 700px at 50% -10%, #11183b 0%, #0d1230 58%, #090d22 100%);
+  --device-bg: #0c1230;
+  --shadow-frame: 0 42px 82px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(183, 195, 255, 0.18);
 }
 
 /* Dark tweaks for spots with fixed colors */
@@ -89,21 +96,42 @@
 
 * { box-sizing: border-box; }
 
+/* Same zoom/gesture lock as MIXED — app stays at 1x and does not jump. */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+
 html, body {
   margin: 0;
-  height: 100%;
+  padding: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 body {
   font-family: var(--sans);
-  background: var(--desk);
+  background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
+  overscroll-behavior: none;
+}
+
+/* iOS Safari zooms when focused fields are < 16px. Force 16px on touch devices. */
+@media (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
 
 .mono { font-family: var(--mono); font-feature-settings: 'tnum' 1; }
@@ -139,14 +167,16 @@ body {
 
 /* ---- iPhone frame --------------------------------------------------------- */
 .device {
-  width: 392px;
-  height: 848px;
-  border-radius: 48px;
+  width: min(392px, 100vw);
+  height: min(848px, 100vh);
+  height: min(848px, 100dvh);
+  border-radius: 44px;
   background: var(--device-bg);
   box-shadow: var(--shadow-frame);
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
+  border: 1px solid rgba(131, 149, 224, 0.24);
 }
 .device .island {
   position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
@@ -167,27 +197,72 @@ body {
   position: absolute; inset: 0; border-radius: 48px; overflow: hidden;
 }
 
-/* On small screens the app fills the window (no frame chrome) */
+/* Mobile + installed PWA: pin shell edge-to-edge (inset only — no height override). */
 @media (max-width: 460px) {
-  body { padding: 0; align-items: stretch; }
-  .stage { gap: 0; }
-  .device {
-    width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none;
+  html, body {
+    height: 100%;
+    background: var(--bg);
   }
-  .device .island { display: none; }
-  .viewport { border-radius: 0; }
-  .device .home-indicator { display: none; }
-  .device .statusbar { display: none; }
+  body {
+    padding: 0;
+    display: block;
+    min-height: 100%;
+  }
+  .stage {
+    gap: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+  }
+  .stage-copy { display: none !important; }
+  .device {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    height: auto;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    background: var(--bg);
+  }
+  .device .island,
+  .device .home-indicator,
+  .device .statusbar { display: none !important; }
+  .viewport {
+    border-radius: 0;
+    position: absolute;
+    inset: 0;
+  }
+  .pad { padding-top: var(--top-chrome); }
+  .pad-top { padding-top: calc(var(--safe-t) + 18px); }
+  .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
 }
 
 /* ---- Screen scaffold ------------------------------------------------------ */
 .screen {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
-  background: var(--bg);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(900px 500px at 5% -20%, rgba(139, 167, 255, 0.32), transparent 60%),
+    radial-gradient(700px 500px at 95% 0%, rgba(164, 199, 255, 0.28), transparent 58%),
+    var(--bg);
   color: var(--ink);
 }
-.scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
 .scroll::-webkit-scrollbar { width: 0; }
 
 .pad { padding: 56px 18px 14px; }
@@ -203,10 +278,11 @@ body {
 
 .iconbtn {
   width: 34px; height: 34px; border-radius: 9px; background: var(--surface);
-  border: 1px solid rgba(17, 20, 24, 0.09);
+  border: 1px solid var(--line-2);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0; -webkit-tap-highlight-color: transparent;
-  transition: transform 0.08s ease, background 0.15s ease;
+  transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 10px 18px rgba(87, 102, 191, 0.12);
 }
 .iconbtn:active { transform: scale(0.92); }
 .iconbtn.plain { background: var(--chip); border: none; }
@@ -216,6 +292,7 @@ body {
 .card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-card); padding: 14px 15px;
+  box-shadow: 0 10px 24px rgba(84, 106, 196, 0.08);
 }
 .card.tight { padding: 0; overflow: hidden; }
 .card.dark { background: var(--teal-ink); border: none; color: #eaf0ee; }
@@ -237,6 +314,7 @@ body {
 .segmented {
   display: flex; gap: 4px; background: var(--seg-bg); border-radius: 10px; padding: 3px;
   font-size: 12px; font-weight: 600;
+  border: 1px solid var(--line);
 }
 .segmented button {
   flex: 1; text-align: center; padding: 7px 6px; border: none; background: transparent;
@@ -251,9 +329,10 @@ body {
   border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600;
   border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); cursor: pointer;
   transition: all 0.12s ease; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 6px 14px rgba(84, 106, 196, 0.08);
 }
 .pill.dark { background: var(--teal-ink); color: #eaf0ee; border-color: transparent; }
-.pill.solid { background: var(--ink); color: #fff; border-color: transparent; }
+.pill.solid { background: linear-gradient(135deg, var(--teal), #7a85ff); color: #fff; border-color: transparent; }
 .pill .dot { width: 7px; height: 7px; border-radius: 50%; }
 .pill.disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -272,27 +351,30 @@ body {
 .btn {
   display: block; width: 100%; text-align: center; border: none; cursor: pointer;
   font-family: inherit; font-weight: 600; font-size: 14px; padding: 14px;
-  border-radius: var(--r-chip); background: var(--teal); color: #fff;
+  border-radius: var(--r-chip);
+  background: linear-gradient(135deg, var(--teal), #7a85ff);
+  color: #fff;
   transition: transform 0.08s ease, filter 0.15s ease; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 12px 22px rgba(88, 101, 242, 0.28);
 }
 .btn:active { transform: scale(0.985); filter: brightness(0.96); }
 .btn.ghost { background: transparent; color: var(--teal); }
 .btn.outline { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); }
-.btn.mint { background: var(--mint); color: var(--teal-ink); font-weight: 700; }
+.btn.mint { background: linear-gradient(135deg, #9ee4ff, #a9f5de); color: var(--teal-ink); font-weight: 700; }
 .btn.sm { padding: 8px; font-size: 12px; border-radius: 9px; }
 
 /* Inputs */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .field input, .field textarea, .field select {
-  width: 100%; font-family: inherit; font-size: 14px; color: var(--ink);
-  background: var(--surface); border: 1px solid var(--line-2); border-radius: 11px;
+  width: 100%; font-family: inherit; font-size: 16px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px;
   padding: 13px 14px; outline: none; transition: border-color 0.15s ease;
 }
 .field input:focus, .field textarea:focus { border-color: var(--teal); border-width: 1.5px; }
 
 /* List rows */
-.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; box-shadow: 0 10px 24px rgba(84, 106, 196, 0.08); }
 .row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 13px 15px; border-bottom: 1px solid var(--hairline); cursor: pointer;
@@ -327,16 +409,74 @@ body {
 /* ---- Bottom tab bar ------------------------------------------------------- */
 .tabbar {
   display: flex; justify-content: space-around; align-items: center;
-  padding: 9px 6px 26px; background: var(--surface); border-top: 1px solid var(--line);
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 8px 10px;
+  padding-left: calc(8px + var(--safe-l));
+  padding-right: calc(8px + var(--safe-r));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
 }
 .tabbar button {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: none; border: none; cursor: pointer; color: var(--muted-3);
-  font-family: inherit; font-size: 9.5px; padding: 2px 6px; -webkit-tap-highlight-color: transparent;
+  font-family: inherit; font-size: 9px; padding: 1px 6px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: color 0.12s ease;
 }
 .tabbar button.active { color: var(--teal); font-weight: 600; }
-.tabbar button svg { display: block; }
+.tabbar button svg { display: block; width: 19px; height: 19px; }
+
+@media (max-width: 380px) {
+  .tabbar { padding-top: 6px; padding-bottom: 8px; }
+  .tabbar button { font-size: 8.5px; }
+  .tabbar button svg { width: 18px; height: 18px; }
+}
+
+/* Installed PWA / iOS home screen — same full-bleed shell as small screens */
+@media (display-mode: standalone) {
+  html, body { height: 100%; background: var(--bg); }
+  body { padding: 0; display: block; min-height: 100%; }
+  .stage { gap: 0; width: 100%; max-width: none; height: 100%; }
+  .stage-copy { display: none !important; }
+  .device {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    width: auto; max-width: none; height: auto;
+    border-radius: 0; box-shadow: none; border: none;
+    background: var(--bg);
+  }
+  .device .island,
+  .device .home-indicator,
+  .device .statusbar { display: none !important; }
+  .viewport { border-radius: 0; position: absolute; inset: 0; }
+  .pad { padding-top: var(--top-chrome); }
+  .pad-top { padding-top: calc(var(--safe-t) + 18px); }
+  .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
+  .tabbar { padding: 8px 6px 10px; }
+}
+
+/* iOS Safari home-screen (navigator.standalone) */
+html.ios.standalone body {
+  padding: 0;
+  display: block;
+  background: var(--bg);
+}
+html.ios.standalone .device {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  width: auto; max-width: none; height: auto;
+  border-radius: 0; box-shadow: none; border: none;
+  background: var(--bg);
+}
+html.ios.standalone .device .island,
+html.ios.standalone .device .home-indicator,
+html.ios.standalone .device .statusbar { display: none !important; }
+html.ios.standalone .viewport { border-radius: 0; position: absolute; inset: 0; }
+html.ios.standalone .pad { padding-top: var(--top-chrome); }
+html.ios.standalone .appbar { padding-top: calc(var(--safe-t) + 10px); padding-bottom: 8px; }
+html.ios.standalone .pad-top { padding-top: calc(var(--safe-t) + 18px); }
 
 /* AI forecast / dark insight card */
 .insight-actions { display: flex; gap: 8px; margin-top: 11px; }
@@ -346,16 +486,16 @@ body {
 .chat-scroll { flex: 1; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 12px; }
 .bubble { max-width: 82%; font-size: 13px; line-height: 1.5; padding: 11px 14px; }
 .bubble.them { align-self: flex-start; background: var(--surface); border: 1px solid var(--hairline); border-radius: 4px 15px 15px 15px; }
-.bubble.me { align-self: flex-end; background: var(--teal); color: #fff; border-radius: 15px 15px 4px 15px; }
+.bubble.me { align-self: flex-end; background: linear-gradient(135deg, var(--teal), #7a85ff); color: #fff; border-radius: 15px 15px 4px 15px; }
 .bubble.ai { align-self: flex-end; background: var(--teal-ink); color: #eaf0ee; border-radius: 15px; }
 .bubble.ai .ai-tag { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mint); }
 .chat-time { text-align: center; font-size: 10.5px; color: var(--muted-3); }
 .approve-row { align-self: flex-end; display: flex; gap: 8px; }
 
-.composer { padding: 8px 14px 10px; background: var(--surface); border-top: 1px solid var(--line); }
+.composer { padding: 8px 14px calc(10px + var(--safe-b)); padding-left: calc(14px + var(--safe-l)); padding-right: calc(14px + var(--safe-r)); background: var(--surface); border-top: 1px solid var(--line); }
 .composer .inputwrap { display: flex; align-items: center; gap: 9px; background: #f3f3ef; border-radius: 22px; padding: 6px 6px 6px 15px; }
-.composer input { flex: 1; border: none; background: none; outline: none; font: inherit; font-size: 13px; color: var(--ink); }
-.composer .send { width: 34px; height: 34px; border-radius: 50%; background: var(--teal); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.composer input { flex: 1; border: none; background: none; outline: none; font: inherit; font-size: 16px; color: var(--ink); }
+.composer .send { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), #7a85ff); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 
 /* Typing dots */
 .typing { display: inline-flex; gap: 4px; align-items: center; }
@@ -366,7 +506,7 @@ body {
 
 /* Toast */
 .toast {
-  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(10px);
+  position: absolute; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%) translateY(10px);
   background: var(--ink); color: #fff; font-size: 12.5px; font-weight: 500;
   padding: 10px 16px; border-radius: 22px; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease; z-index: 200; max-width: 80%; text-align: center;
@@ -382,9 +522,14 @@ body {
 .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0; background: var(--bg);
-  border-radius: 24px 24px 0 0; z-index: 160; padding: 10px 18px 30px;
+  border-radius: 26px 26px 0 0;
+  border-top: 1px solid var(--line-2);
+  box-shadow: 0 -18px 44px rgba(39, 55, 124, 0.22);
+  z-index: 160;
+  padding: 10px calc(18px + var(--safe-r)) calc(30px + var(--safe-b)) calc(18px + var(--safe-l));
   transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   max-height: 82%; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .sheet.show { transform: translateY(0); }
 .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.15); margin: 6px auto 14px; }
@@ -414,4 +559,4 @@ body {
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 a { color: inherit; text-decoration: none; }
-button { font-family: inherit; }
+button { font-family: inherit; touch-action: manipulation; }

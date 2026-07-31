@@ -8,6 +8,10 @@ process.env.PORT = process.env.TEST_PORT || '4199';
 process.env.HOST = '127.0.0.1';
 process.env.OLLAMA_HOST = 'http://127.0.0.1:9'; // unused → fast fallback
 process.env.ADMIN_TOKEN = 'test-token';
+// Force the simulated engine (disable hosted AI + KV) so tests are deterministic
+// regardless of what's in the developer's .env.
+process.env.AI_API_URL = ''; process.env.AI_API_KEY = '';
+process.env.KV_REST_API_URL = ''; process.env.KV_REST_API_TOKEN = '';
 // Isolate the database so tests never touch the dev data/db.json.
 const os = require('node:os');
 const pathMod = require('node:path');
@@ -198,12 +202,38 @@ test('login rejects wrong password, accepts correct', async () => {
   const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
   assert.equal(ok.status, 200);
   assert.ok(ok.json.token);
+  assert.equal(ok.json.user.isGuest, false);
+  assert.equal(ok.json.user.email, 'owner@test.co');
+});
+
+test('login rejects unregistered email and empty credentials', async () => {
+  const missing = await req('POST', '/api/auth/login', { body: { email: 'nobody@notregistered.test', password: 'whatever12' } });
+  assert.equal(missing.status, 401);
+  assert.match(String(missing.json.error || ''), /No StatVibe account|register/i);
+
+  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'bad', password: 'whatever12' } })).status, 400);
+  assert.equal((await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: '' } })).status, 400);
+});
+
+test('login session lasts ~30 days and /auth/me restores it', async () => {
+  const ok = await req('POST', '/api/auth/login', { body: { email: 'owner@test.co', password: 'supersecret' } });
+  assert.equal(ok.status, 200);
+  const me = await req('GET', '/api/auth/me', { headers: auth(ok.json.token) });
+  assert.equal(me.status, 200);
+  assert.equal(me.json.user.email, 'owner@test.co');
+  assert.equal(me.json.user.isGuest, false);
 });
 
 test('guest session works and is flagged', async () => {
   const r = await req('POST', '/api/auth/guest');
   assert.equal(r.status, 201);
   assert.equal(r.json.user.isGuest, true);
+});
+
+test('guest cannot be used as a registered login', async () => {
+  // Guests have no email — login with a random email still must fail (no auto-promote).
+  const r = await req('POST', '/api/auth/login', { body: { email: 'guest-fake@test.co', password: 'password1' } });
+  assert.equal(r.status, 401);
 });
 
 test('protected endpoints require auth', async () => {
@@ -217,6 +247,24 @@ test('account setup requires business name and validates currency', async () => 
   assert.equal(r.status, 200);
   assert.equal(r.json.account.setupComplete, true);
   assert.equal(r.json.account.currency, 'PHP');
+});
+
+test('account PATCH persists statsDraft and calc for the session', async () => {
+  const r = await req('PATCH', '/api/account', {
+    headers: auth(userToken),
+    body: {
+      statsDraft: { revenue: '1000', products: '10', avgPrice: '100' },
+      calc: { tab: 'Product', unitCost: 12, freight: 1, overhead: 2, markup: 40, targetMargin: 40 },
+    },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.account.statsDraft.revenue, '1000');
+  assert.equal(r.json.account.calc.tab, 'Product');
+  assert.equal(r.json.account.calc.unitCost, 12);
+  const me = await req('GET', '/api/auth/me', { headers: auth(userToken) });
+  assert.equal(me.status, 200);
+  assert.equal(me.json.account.statsDraft.products, '10');
+  assert.equal(me.json.account.calc.markup, 40);
 });
 
 let itemId = null;
@@ -354,7 +402,25 @@ test('admin: registered users list + token metrics present', async () => {
   assert.ok(r.json.users.some((u) => u.email === 'alpha@test.co' && u.business === 'Alpha Co' && u.currency === 'PHP'));
   const s = await req('GET', '/api/admin/summary', { headers: { 'x-admin-token': 'test-token' } });
   assert.ok(s.json.users.total >= 1);
+  assert.ok(s.json.users.registered >= 1);
+  assert.ok(Array.isArray(s.json.users.signups));
+  assert.ok(s.json.payments);
+  assert.ok(s.json.privacy && s.json.privacy.note);
   assert.ok(s.json.metrics.tokens && typeof s.json.metrics.tokens.total === 'number');
+});
+
+test('account upgrade records payment and shows in admin', async () => {
+  const up = await req('POST', '/api/account/upgrade', { headers: auth(alphaToken), body: { plan: 'Pro' } });
+  assert.equal(up.status, 200);
+  assert.equal(up.json.account.plan, 'Pro');
+  assert.equal(up.json.payment.plan, 'Pro');
+  const users = await req('GET', '/api/admin/users', { headers: { 'x-admin-token': 'test-token' } });
+  const row = users.json.users.find((u) => u.email === 'alpha@test.co');
+  assert.equal(row.plan, 'Pro');
+  assert.equal(row.phone, undefined);
+  const pays = await req('GET', '/api/admin/payments', { headers: { 'x-admin-token': 'test-token' } });
+  assert.equal(pays.status, 200);
+  assert.ok(pays.json.payments.some((p) => p.plan === 'Pro' && p.email === 'alpha@test.co'));
 });
 
 test('AI chat records token usage', async () => {
@@ -368,4 +434,49 @@ test('paymongo QR: clear "not configured" when no key set', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.configured, false);
   assert.match(r.json.message, /PayMongo/);
+});
+
+// --- Real cross-user messaging (Agent) ---
+test('two users message each other via StatVibe code, inbox + unread work', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'msga@test.co', password: 'password1', name: 'Msg A', acceptedTerms: true } });
+  const B = await req('POST', '/api/auth/register', { body: { email: 'msgb@test.co', password: 'password1', name: 'Msg B', acceptedTerms: true } });
+  const at = A.json.token, bt = B.json.token, bTag = B.json.user.tag;
+
+  // A adds B by code (as if scanning B's QR)
+  const conv = await req('POST', '/api/conversations', { headers: auth(at), body: { tag: 'statvibe:' + bTag } });
+  assert.equal(conv.status, 200);
+  const cid = conv.json.conversation.id;
+  assert.equal(conv.json.conversation.other.name, 'Msg B');
+
+  // A sends
+  assert.equal((await req('POST', '/api/conversations/' + cid + '/messages', { headers: auth(at), body: { text: 'Hello B' } })).status, 201);
+
+  // B sees it in the inbox as unread
+  const bInbox = await req('GET', '/api/conversations', { headers: auth(bt) });
+  assert.equal(bInbox.json.conversations.length, 1);
+  assert.equal(bInbox.json.conversations[0].unread, 1);
+  assert.equal(bInbox.json.unreadTotal, 1);
+  assert.equal(bInbox.json.conversations[0].lastText, 'Hello B');
+
+  // B opens the thread (marks read) and replies
+  const msgs = await req('GET', '/api/conversations/' + cid + '/messages', { headers: auth(bt) });
+  assert.equal(msgs.json.messages.length, 1);
+  assert.equal(msgs.json.other.name, 'Msg A');
+  await req('POST', '/api/conversations/' + cid + '/messages', { headers: auth(bt), body: { text: 'Yes we do!' } });
+  assert.equal((await req('GET', '/api/conversations', { headers: auth(bt) })).json.unreadTotal, 0);
+
+  // A now has an unread reply
+  assert.equal((await req('GET', '/api/conversations', { headers: auth(at) })).json.conversations[0].unread, 1);
+});
+
+test('cannot start a conversation with your own code', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'self@test.co', password: 'password1', name: 'Self', acceptedTerms: true } });
+  const r = await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: A.json.user.tag } });
+  assert.equal(r.status, 400);
+});
+
+test('unknown code → 404; conversation endpoints require auth', async () => {
+  const A = await req('POST', '/api/auth/register', { body: { email: 'u404@test.co', password: 'password1', name: 'U', acceptedTerms: true } });
+  assert.equal((await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: 'SV-NOPEXX' } })).status, 404);
+  assert.equal((await req('GET', '/api/conversations')).status, 401);
 });

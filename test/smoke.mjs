@@ -65,7 +65,7 @@ function connectWS(url) {
 async function main() {
   if (!chrome) { console.log('No Chrome found — skipping browser smoke test (API tests still cover the server).'); process.exit(0); }
 
-  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token' } });
+  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token', AI_API_URL: '', AI_API_KEY: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '' } });
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-smoke-'));
   let browser;
   try {
@@ -107,7 +107,7 @@ async function main() {
 
     // 3. Tab navigation across all five tabs (use data-tab, robust to badges)
     let tabsOk = true;
-    for (const [tab, needle] of [['calc', 'Calculator'], ['hub', 'Idea Hub'], ['ai', 'AI Workspace'], ['agent', 'AgentTech'], ['stats', 'Revenue by channel']]) {
+    for (const [tab, needle] of [['calc', 'Calculator'], ['hub', 'Idea Hub'], ['ai', 'AI Workspace'], ['agent', 'Messages'], ['stats', 'Overview']]) {
       await ev(`document.querySelector('.tabbar [data-tab=${tab}]')?.click()`);
       await sleep(250);
       const seen = await ev(`document.body.innerText.includes(${JSON.stringify(needle)})`);
@@ -131,13 +131,14 @@ async function main() {
     let inv = false; for (let i = 0; i < 25; i++) { await sleep(400); if (await ev(`document.body.innerText.includes('Smoke Rice') && /(days|weeks|months) left/.test(document.body.innerText)`)) { inv = true; break; } }
     inv ? ok('inventory add + days/weeks/months prediction') : fail('inventory add + days/weeks/months prediction');
 
-    // 5. AgentTech drafts once, does not stack
-    await ev(`document.querySelector('.tabbar [data-tab=agent]')?.click()`); await sleep(250);
-    await ev(`document.querySelector('[data-act=agentDraft]').click()`);
-    for (let i = 0; i < 20; i++) { await sleep(400); const n = await ev(`document.querySelectorAll('.bubble.ai').length`); if (n >= 1 && await ev(`!!document.querySelector('[data-act=approveSend]')`)) break; }
-    await ev(`document.querySelector('[data-act=agentDraft]').click()`); await sleep(1500);
-    const aiCount = await ev(`document.querySelectorAll('.bubble.ai').length`);
-    (aiCount === 1) ? ok('AgentTech drafts exactly once') : fail('AgentTech drafts exactly once', 'count=' + aiCount);
+    // 5. Agent is a Messenger-style inbox, empty by default, with New-message flow
+    await ev(`document.querySelector('.tabbar [data-tab=agent]')?.click()`); await sleep(400);
+    const emptyInbox = await ev(`document.body.innerText.includes('No messages yet') && !!document.querySelector('[data-act=newChat]')`);
+    emptyInbox ? ok('Agent inbox empty state + New message') : fail('Agent inbox empty state + New message');
+    await ev(`document.querySelector('[data-act=newChat]')?.click()`); await sleep(350);
+    const addUI = await ev(`!!document.querySelector('#tagInput')`);
+    addUI ? ok('Add-contact by code/QR available') : fail('Add-contact by code/QR available');
+    await ev(`document.querySelector('.sheet-backdrop')?.click()`); await sleep(200);
 
     // 6. AI workspace generates a document
     await ev(`document.querySelector('.tabbar [data-tab=ai]')?.click()`); await sleep(300);

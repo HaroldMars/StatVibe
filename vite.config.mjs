@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
+import { basename } from 'node:path';
 import path from 'node:path';
+import fs from 'node:fs';
 import { defineConfig } from 'vite';
 
 const require = createRequire(import.meta.url);
@@ -24,10 +26,23 @@ function localApiPlugin() {
   };
 }
 
+function copyPublicShellPlugin() {
+  const files = ['sw.js'];
+  return {
+    name: 'statvibe-copy-shell',
+    closeBundle() {
+      const outDir = path.resolve('dist');
+      for (const file of files) {
+        fs.copyFileSync(path.resolve('public', file), path.join(outDir, file));
+      }
+    },
+  };
+}
+
 export default defineConfig({
   root: 'public',
   publicDir: false,
-  plugins: [localApiPlugin()],
+  plugins: [localApiPlugin(), copyPublicShellPlugin()],
   build: {
     outDir: '../dist',
     emptyOutDir: true,
@@ -35,6 +50,14 @@ export default defineConfig({
       input: {
         main: path.resolve('public/index.html'),
         admin: path.resolve('public/admin.html'),
+      },
+      output: {
+        assetFileNames: (assetInfo) => {
+          const fixed = new Set(['logo-main.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'manifest.webmanifest']);
+          const nm = basename(assetInfo.name || '');
+          if (fixed.has(nm)) return '[name][extname]';
+          return 'assets/[name]-[hash][extname]';
+        },
       },
     },
   },

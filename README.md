@@ -6,8 +6,8 @@ workspace, and the **AgentTech** client-messaging assistant. Built for teams of 
 size, in any industry.
 
 Implemented from the Claude Design project **“Global Business Application Design”**
-(`Business App.dc.html`) using the **Slate Ledger** direction: light, hairline-precise,
-tabular — IBM Plex + mono numerals, one restrained teal accent.
+(`Business App.dc.html`) and updated to a playful, mobile-first UI direction with
+rounded surfaces, brighter gradients, and install-ready app icon assets.
 
 > A new, upcoming project of **Illuminary Peak Company · 2026**.
 
@@ -16,15 +16,27 @@ tabular — IBM Plex + mono numerals, one restrained teal accent.
 ## Quick start
 
 ```bash
-npm start            # → http://localhost:4173
+npm run dev          # Vite dev server + local /api middleware
 ```
 
-No dependencies to install — the server uses Node built-ins only (**Node 18+**).
+For a production-like local run:
 
-## AI integration (free, local)
+```bash
+npm run build
+npm start            # serves dist/ when present, else public/
+```
 
-AI features call a local **[Ollama](https://ollama.com)** instance through the server
-proxy (`/api/chat`) — no API keys, no cost.
+Backend-only mode is still available:
+
+```bash
+npm run dev:server   # zero-dependency Node server on :4173
+```
+
+## AI integration (local or hosted)
+
+AI features call either local **[Ollama](https://ollama.com)** or a hosted
+OpenAI-compatible API (OpenRouter, Groq, Together, OpenAI, etc.) through the
+same server proxy endpoint: `/api/chat`.
 
 ```bash
 ollama pull gemma2   # or llama3.1, mistral, qwen2.5 …  (once)
@@ -36,8 +48,11 @@ ollama serve         # usually already running
 - **Cloud models** (Claude, GPT-4o, Gemini, Grok) are shown but marked **“Not available
   yet.”** An admin can flip any of them to *available* from the console (they then run
   through the simulator, clearly labelled).
-- **No Ollama?** The app still works fully — it falls back to a built-in simulated
-  responder. Point at another host with `OLLAMA_HOST=http://host:11434`.
+- **Hosted fallback:** set `AI_API_URL`, `AI_API_KEY`, and `AI_MODEL` to keep AI live
+  for users who do not run local Ollama.
+- **No Ollama + no hosted key?** The app still works fully — it falls back to a
+  built-in simulated responder. Point at another host with
+  `OLLAMA_HOST=http://host:11434`.
 
 ## Accounts (beta)
 
@@ -145,10 +160,10 @@ npm run smoke  # browser end-to-end smoke via headless Chrome (skips if none fou
 
 ## Deployment
 
-### Vercel (recommended)
+### Vercel (recommended, Vite + serverless API)
 
-The repo is Vercel-ready: `vercel.json` serves `public/` statically and routes `/api/*`
-to a serverless function (`api/index.js`, which wraps the shared handler in `server.js`).
+The repo is Vercel-ready with a Vite static build (`dist/`) plus a serverless API:
+`/api/*` routes to `api/index.js` (which wraps the shared handler in `server.js`).
 
 1. Import the repo in Vercel (no build command needed).
 2. **Add durable storage:** Vercel → **Storage → KV** → *Create* and connect it. That
@@ -156,8 +171,8 @@ to a serverless function (`api/index.js`, which wraps the shared handler in `ser
    *(Without KV, Vercel writes to `/tmp`, which is ephemeral — accounts disappear on cold
    starts. KV takes ~1 minute to add and makes data durable.)*
 3. **Set env vars** (Settings → Environment Variables): `ADMIN_USER`, `ADMIN_PASSWORD`,
-   `ADMIN_TOKEN`, and optionally `OLLAMA_HOST` (a **public** Ollama server — local Ollama
-   is unreachable from Vercel, so AI falls back to the simulated engine without it), and
+   `ADMIN_TOKEN`, `AI_API_URL`, `AI_API_KEY`, `AI_MODEL`, and optionally `OLLAMA_HOST`
+   (a **public** Ollama server — local Ollama is unreachable from Vercel), plus
    `PAYMONGO_SECRET_KEY` for live payments.
 4. Deploy. `/` is the app, `/admin` is the developer console.
 
@@ -190,7 +205,7 @@ lib/
   auth.js            Password hashing (scrypt) + tokens + validation
 public/
   index.html         App shell + iPhone frame + desktop side panel
-  styles.css         Slate Ledger design system
+  styles.css         Mobile-first design system (playful app-style theme)
   app.js             Consumer SPA: state, router, auth/setup/inventory, theming, all screens
   admin.html/admin.js  Separate developer console served at /admin
   logo.svg           StatVibe logo (used as app icon & favicon)
@@ -209,6 +224,5 @@ Dockerfile · Procfile · .env.example · package.json · ROADMAP.md
 
 - Auth, payments and third-party integrations are simulated. AI output is real (from your
   local model) when Ollama is running. `data/` (persisted admin config) is gitignored.
-- **Logo:** `public/logo.svg` is a scalable recreation of the StatVibe mark. To use an
-  exact raster, drop `public/logo.png` and point the `<img>` / favicon at it.
-# StatVibe
+- **Logo/App icon:** app icon assets are served from `public/logo.svg`,
+  `public/icon-192.png`, `public/icon-512.png`, and `public/apple-touch-icon.png`.
