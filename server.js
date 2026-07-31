@@ -464,12 +464,17 @@ async function getAuthUser(req) {
   const h = req.headers['authorization'] || '';
   const m = /^Bearer\s+(.+)$/i.exec(h);
   if (!m) return null;
-  const token = m[1];
+  const token = m[1].trim();
+  if (!token) return null;
   const s = await store.getSession(token);
-  if (!s) return null;
+  if (!s) {
+    log('warn', 'auth miss — no session for token prefix ' + token.slice(0, 8));
+    return null;
+  }
   const u = await store.getUserById(s.userId);
   if (!u) {
     await store.deleteSession(token);
+    log('warn', 'auth miss — session user gone ' + s.userId);
     return null;
   }
   // Sliding 30-day window for registered accounts; shorter for guests.
@@ -741,14 +746,16 @@ function normalizeItem(b) {
 
 async function handleInventory(req, res, sub, body) {
   const authed = await getAuthUser(req);
-  if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  if (!authed) return sendJSON(res, 401, { error: 'Not signed in', code: 'not_signed_in' });
   const { user } = authed;
 
   if (sub === '' && req.method === 'GET') return sendJSON(res, 200, { inventory: await store.listInventory(user.id) });
   if (sub === '' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
     if (!b.name || !String(b.name).trim()) return sendJSON(res, 400, { error: 'Item name is required' });
-    return sendJSON(res, 201, { item: await store.addInventory(user.id, normalizeItem(b)) });
+    const item = await store.addInventory(user.id, normalizeItem(b));
+    log('info', 'inventory add ' + (user.email || user.id) + ' · ' + item.name);
+    return sendJSON(res, 201, { item });
   }
   // /api/inventory/:id
   const id = sub;

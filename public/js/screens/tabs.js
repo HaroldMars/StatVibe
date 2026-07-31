@@ -107,7 +107,7 @@ tabScreens.stats = () => `
   <div class="scroll pad-top" style="padding-left:18px;padding-right:18px;padding-bottom:14px">
     <div class="row-between mb-20" style="padding-top:0">
       <div class="flex items-center gap-10">
-        <div style="width:34px;height:34px;border-radius:9px;background:#0E7C66;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;letter-spacing:.5px">${initials(bizName())}</div>
+        <div style="width:34px;height:34px;border-radius:9px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;letter-spacing:.5px">${initials(bizName())}</div>
         <div>
           <div class="flex items-center" style="gap:5px;font-weight:600;font-size:14px" data-act="goto" data-s="settings">${esc(bizName())} ${I.chevDown}</div>
           <div style="font-size:11px;color:var(--muted-2)">Overview · This month</div>
@@ -116,7 +116,7 @@ tabScreens.stats = () => `
       <div class="flex gap-8">
         <button class="iconbtn" data-act="goto" data-s="alerts">${I.bell}</button>
         <button class="iconbtn accent" data-tab="ai">${I.spark('#fff', 16, true)}</button>
-        <button class="iconbtn" data-act="goto" data-s="settings" title="Settings & profile" style="background:#0E7C66;border:none;color:#fff;font-weight:700;font-size:12px;letter-spacing:.3px">${initials(userName())}</button>
+        <button class="iconbtn" data-act="goto" data-s="settings" title="Settings & profile" style="background:var(--teal);border:none;color:#fff;font-weight:700;font-size:12px;letter-spacing:.3px">${initials(userName())}</button>
       </div>
     </div>
 
@@ -232,8 +232,8 @@ export function inventoryView() {
         <div><div class="big-num" style="font-size:16px">${money(it.price)}</div><div style="font-size:10px;color:var(--muted-2)">price</div></div>
         <div><div class="big-num" style="font-size:16px">${it.ratePerDay || '—'}<span style="font-size:10px;color:var(--muted-2)">/d</span></div><div style="font-size:10px;color:var(--muted-2)">${esc(it.rateBasis || 'sales')}</div></div>
       </div>
-      ${pred && pred.note ? `<div class="flex items-center" style="gap:7px;background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:9px;padding:8px 10px;margin-top:10px">${I.spark('#0E7C66', 13, true)}<span style="font-size:11.5px;color:var(--teal-deep);line-height:1.4">${esc(pred.note)}</span></div>`
-        : `<button class="btn sm outline" data-act="predictItem" data-id="${it.id}" style="margin-top:10px;width:auto;padding:8px 12px">${I.spark('#0E7C66', 12, true)} Predict days left</button>`}
+      ${pred && pred.note ? `<div class="flex items-center" style="gap:7px;background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:9px;padding:8px 10px;margin-top:10px">${I.spark('var(--teal)', 13, true)}<span style="font-size:11.5px;color:var(--teal-deep);line-height:1.4">${esc(pred.note)}</span></div>`
+        : `<button class="btn sm outline" data-act="predictItem" data-id="${it.id}" style="margin-top:10px;width:auto;padding:8px 12px">${I.spark('var(--teal)', 12, true)} Predict days left</button>`}
     </div>`;
   }).join('');
   return `<div class="row-between mb-10"><div style="font-size:13px;font-weight:600">Inventory · ${items.length} item${items.length > 1 ? 's' : ''}</div><button class="pill solid" data-act="addItem" style="padding:5px 11px">${I.plus('#fff', 12)} Add</button></div>${rows}`;
@@ -251,7 +251,7 @@ tabScreens.hub = () => {
       <button class="pill solid" data-act="newIdea" style="height:34px">${I.plus('#fff', 14)} New</button>
     </div>
     <div class="card mb-14" style="background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);padding:12px 14px">
-      <div class="flex items-center" style="gap:8px;margin-bottom:8px">${I.spark('#0E7C66', 14, true)}<span style="font-size:12.5px;font-weight:600;color:var(--teal-deep)">AIVibe — turn a rough idea into a sharp prompt</span></div>
+      <div class="flex items-center" style="gap:8px;margin-bottom:8px">${I.spark('var(--teal)', 14, true)}<span style="font-size:12.5px;font-weight:600;color:var(--teal-deep)">AIVibe — turn a rough idea into a sharp prompt</span></div>
       <input id="aivibeInput" placeholder="Describe an idea in your own words…" style="width:100%;border:1px solid var(--teal-tint-border);border-radius:9px;padding:10px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink);outline:none" />
       <button class="btn sm" data-act="aivibe" style="margin-top:8px;width:auto;padding:8px 14px">Reformulate with AI →</button>
     </div>
@@ -268,12 +268,12 @@ tabScreens.ai = () => {
   const m = state.models;
   const engineChips = m.engines.map((e) => {
     const on = m.active.has(e.id);
-    return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${e.id}"><span class="dot" style="background:${on ? '#7FE3C8' : '#0E7C66'}"></span>${esc(e.label)}</button>`;
+    return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${e.id}"><span class="dot" style="background:${on ? 'var(--mint)' : 'var(--teal)'}"></span>${esc(e.label)}</button>`;
   }).join('');
   const cloudChips = m.cloud.map((c) => {
     if (c.available) {
       const on = m.active.has(c.id);
-      return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${c.id}"><span class="dot" style="background:${on ? '#7FE3C8' : '#0E7C66'}"></span>${esc(c.label)}</button>`;
+      return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${c.id}"><span class="dot" style="background:${on ? 'var(--mint)' : 'var(--teal)'}"></span>${esc(c.label)}</button>`;
     }
     return `<button class="pill disabled" data-act="cloudUnavail" data-l="${esc(c.label)}">+ ${esc(c.label)}</button>`;
   }).join('');
@@ -289,14 +289,14 @@ tabScreens.ai = () => {
     <div class="flex gap-8 mb-14 flex-wrap">${engineChips}${cloudChips}</div>
 
     <div class="flex items-center row-between" style="background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:12px;padding:11px 13px;margin-bottom:16px">
-      <div><div style="font-size:12.5px;font-weight:600;color:var(--teal-deep)">Blend mode</div><div style="font-size:11px;color:#5C8378">Route each task to the best model automatically</div></div>
+      <div><div style="font-size:12.5px;font-weight:600;color:var(--teal-deep)">Blend mode</div><div style="font-size:11px;color:var(--muted)">Route each task to the best model automatically</div></div>
       <button class="toggle ${m.blend ? 'on' : ''}" data-act="toggleBlend"></button>
     </div>
 
     <div class="card mb-14">
       <textarea id="aiPrompt" rows="2" style="width:100%;border:none;outline:none;background:none;font:inherit;font-size:13px;line-height:1.5;resize:none;color:var(--ink)">${esc(prefill)}</textarea>
       <div class="flex items-center gap-8 flex-wrap" style="margin-top:8px">
-        <span class="flex items-center" style="gap:5px;font-size:11px;color:var(--muted);background:var(--chip);border-radius:8px;padding:5px 9px">${I.bars('#0E7C66', 12)}Revenue.csv</span>
+        <span class="flex items-center" style="gap:5px;font-size:11px;color:var(--muted);background:var(--chip);border-radius:8px;padding:5px 9px">${I.bars('var(--teal)', 12)}Revenue.csv</span>
         <span style="font-size:11px;color:var(--muted);background:var(--chip);border-radius:8px;padding:5px 9px">Margin report</span>
         <button class="iconbtn accent" data-act="runAI" style="margin-left:auto;border-radius:10px">${I.arrow}</button>
       </div>
@@ -371,7 +371,7 @@ screens.chat = () => {
   <div class="composer">
     <div class="inputwrap">
       <input id="agentInput" placeholder="Message…" />
-      <button class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('#0E7C66', 12, true)} AI</button>
+      <button class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('var(--teal)', 12, true)} AI</button>
       <button class="send" data-act="agentSend">${I.send}</button>
     </div>
   </div>`;

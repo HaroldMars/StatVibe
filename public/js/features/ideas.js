@@ -31,7 +31,7 @@ export function editIdea(id) {
     <div class="field"><label>Notes</label><textarea id="edNotes" rows="4">${esc(it.notes || '')}</textarea></div>
     <div class="field"><label>Status</label><div class="flex gap-8" id="edStatus">${statuses.map((s) => `<button class="pill ${s === it.status ? 'solid' : ''}" data-st="${s}">${s}</button>`).join('')}</div></div>
     <button class="btn mb-10" data-a-save>Save changes</button>
-    <button class="btn outline mb-10" data-a-ai>${I.spark('#0E7C66', 12, true)} AI next steps</button>
+    <button class="btn outline mb-10" data-a-ai>${I.spark('var(--teal)', 12, true)} AI next steps</button>
     <button class="btn outline" data-a-del style="color:var(--red)">Delete idea</button>`);
   let status = it.status;
   setTimeout(() => {
@@ -67,7 +67,7 @@ export async function aivibe() {
   toast('AIVibe is refining…');
   try {
     const d = await callAI(`Rewrite this rough business idea into a clear, specific, well-structured AI prompt I can reuse. Keep it under 80 words. Idea: "${raw}"`, 'You are AIVibe, a prompt engineer for business owners. Output ONLY the refined prompt, no preamble.');
-    openSheet(`<h3>${I.spark('#0E7C66', 15, true)} AIVibe prompt</h3>
+    openSheet(`<h3>${I.spark('var(--teal)', 15, true)} AIVibe prompt</h3>
       <div style="font-size:11px;color:var(--muted-2);margin:4px 0 10px">From: "${esc(raw)}"</div>
       <div style="background:var(--chip);border-radius:10px;padding:12px;font-size:13px;line-height:1.55;white-space:pre-wrap">${esc(d.content.trim())}</div>
       <button class="btn" data-a-run style="margin-top:12px">Run this prompt in AI Workspace →</button>

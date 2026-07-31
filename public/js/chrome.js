@@ -5,7 +5,7 @@ export function tabbar(active) {
   const item = (id, label, icon, badge) => `
     <button data-tab="${id}" class="${active === id ? 'active' : ''}" style="position:relative">
       ${badge ? `<span style="position:absolute;top:-2px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box">${badge > 9 ? '9+' : badge}</span>` : ''}
-      ${icon(active === id ? '#0E7C66' : '#9AA0A8')}<span>${label}</span>
+      ${icon(active === id ? 'currentColor' : 'currentColor')}<span>${label}</span>
     </button>`;
   const unread = (state.session && state.session.unreadTotal) || 0;
   return `<div class="tabbar">
