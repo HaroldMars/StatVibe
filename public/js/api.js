@@ -44,14 +44,38 @@ export function storedSessionStillValid() {
   } catch { return true; }
 }
 
+export function readStoredToken() {
+  try {
+    return localStorage.getItem(STORAGE.LOCAL_TOKEN) || sessionStorage.getItem(STORAGE.SESSION_TOKEN) || null;
+  } catch { return null; }
+}
+
+export function getAuthToken() {
+  if (state.session.token) return state.session.token;
+  const tok = readStoredToken();
+  if (tok) state.session.token = tok;
+  return tok;
+}
+
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (auth && state.session.token) headers['Authorization'] = 'Bearer ' + state.session.token;
+  if (auth) {
+    const tok = getAuthToken();
+    if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  }
   let r;
   try { r = await fetch('/api' + path, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
   catch (e) { return { status: 0, data: { error: 'No internet connection. Check your network and try again.', code: 'offline' } }; }
   let data = {}; try { data = await r.json(); } catch { /* no body */ }
+  // Recover once if the client thought it was signed in but the token was missing from the request.
+  if (auth && r.status === 401 && data && data.code === 'not_signed_in' && !headers.Authorization) {
+    const tok = readStoredToken();
+    if (tok) {
+      state.session.token = tok;
+      return api(path, { method, body, auth: true });
+    }
+  }
   return { status: r.status, data };
 }
 

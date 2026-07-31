@@ -95,7 +95,7 @@ screens.settings = () => {
   <div class="scroll" style="padding:6px 18px 20px">
     ${isGuest ? guestBanner() : ''}
     <button class="card mb-16" data-act="goto" data-s="profile" style="display:flex;align-items:center;gap:13px;padding:15px;width:100%;text-align:left;border:1px solid var(--line);cursor:pointer">
-      <div style="width:48px;height:48px;border-radius:14px;background:#0E7C66;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">${initials(u.name || 'Guest')}</div>
+      <div style="width:48px;height:48px;border-radius:14px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">${initials(u.name || 'Guest')}</div>
       <div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(u.name || 'Guest')}</div><div style="font-size:12px;color:var(--muted-2)">${esc(u.email || 'Guest session')} · ${isGuest ? 'Guest' : 'Owner'}</div></div>
       ${I.chevR}
     </button>
@@ -167,7 +167,7 @@ screens.profile = () => {
   ${appbar('Profile', { right: `<span data-act="saveProfile" style="font-size:13px;font-weight:600;color:var(--teal);cursor:pointer;padding:0 4px">Done</span>` })}
   <div class="scroll" style="padding:6px 18px 24px">
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:10px 0 22px">
-      <div style="width:76px;height:76px;border-radius:22px;background:#0E7C66;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:28px" id="pfAvatar">${initials(p.name)}</div>
+      <div style="width:76px;height:76px;border-radius:22px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:28px" id="pfAvatar">${initials(p.name)}</div>
       <div style="text-align:center"><div style="font-size:18px;font-weight:700;letter-spacing:-.3px" id="pfName">${esc(p.name)}</div><div style="margin-top:5px"><span class="tagchip green">${esc(p.role)}</span> <span style="font-size:11.5px;color:var(--muted-2)">· ${esc(bizName())}</span></div></div>
     </div>
     <div class="eyebrow mb-8">Personal details</div>
@@ -227,7 +227,7 @@ screens.admin = () => {
     <div class="flex items-center" style="gap:7px;background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:10px;padding:9px 12px;margin-bottom:16px">
       <span style="width:8px;height:8px;border-radius:50%;background:var(--teal)"></span>
       <span style="font-size:12px;color:var(--teal-deep);font-weight:600">Connected as ${esc(s.admin_user || a.user || 'GenAdmin')}</span>
-      <span style="font-size:11px;color:#5C8378;margin-left:auto">${(s.ollama && s.ollama.online) ? 'live' : 'degraded'}</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:auto">${(s.ollama && s.ollama.online) ? 'live' : 'degraded'}</span>
     </div>
 
     <div class="eyebrow mb-8">System</div>
@@ -298,13 +298,13 @@ screens.plans = () => {
     <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan}</div></div>
     <div class="card mb-14">
       <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this month</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
-      <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,#0E7C66,#E0A030)"></i></div>
+      <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
       <div style="font-size:11px;color:var(--muted-2)">${u.used.toLocaleString()} / ${u.limit.toLocaleString()} AI actions · resets in ${u.resetDays} days</div>
     </div>
     <div class="stack gap-10">
       ${plans.map((p) => p.pop ? `
-        <div class="card dark" style="border:1.5px solid #0E7C66;position:relative;padding:16px">
-          <span class="tagchip" style="position:absolute;top:-9px;left:16px;background:#0E7C66;color:#fff">Most popular</span>
+        <div class="card dark" style="border:1.5px solid var(--teal);position:relative;padding:16px">
+          <span class="tagchip" style="position:absolute;top:-9px;left:16px;background:var(--teal);color:#fff">Most popular</span>
           <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:22px;font-weight:600">${p.price}</span><span style="font-size:12px;color:#9FBAB2">${p.per}</span></div></div>
           <div style="font-size:12px;color:#C3D6D0;margin:8px 0 12px;line-height:1.55">${p.desc}</div>
           <button class="btn mint sm" data-act="upgrade" data-p="${p.name}" style="padding:11px">Upgrade to ${p.name}</button>
