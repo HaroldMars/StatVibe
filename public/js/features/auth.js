@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { api, applySession, clearTokenStorage, persistToken } from '../api.js';
+import { api, applySession, clearTokenStorage, persistToken, rememberEmail, readRememberedEmail } from '../api.js';
 import { $, clientEmailOk, toast } from '../utils.js';
 import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
@@ -50,6 +50,8 @@ export async function doGuest() {
   if (status === 201 || status === 200) {
     if (applySession(data, { remember: false })) {
       clearAuthFormError();
+      state.auth.preferLogin = false;
+      state.auth.sessionExpired = false;
       state.stack = [];
       render();
       toast('Exploring without an account — create one to save your work');
@@ -84,12 +86,23 @@ export async function doRegister() {
     });
     if (status === 201 && data.user && !data.user.isGuest && data.token) {
       // Instant session — user is signed in immediately and can use the app / log in again anytime.
+      rememberEmail(email);
       applySession(data, { remember: true });
       clearAuthFormError();
-      state.auth.emailDraft = '';
+      state.auth.emailDraft = email;
+      state.auth.preferLogin = false;
+      state.auth.sessionExpired = false;
       state.stack = [];
       render();
       toast('Account created — you are signed in');
+      return;
+    }
+    if (status === 409 && data.code === 'email_taken') {
+      // Existing account — send them to Log in with the same email prefilled.
+      rememberEmail(email);
+      state.auth.preferLogin = true;
+      setAuthFormError(data.error || 'An account already exists with that email. Sign in instead.', 'email_taken');
+      render();
       return;
     }
     setAuthFormError(data.error || 'Could not create account', data.code || '');
@@ -120,9 +133,12 @@ export async function doLogin() {
     const okUser = data && data.user && !data.user.isGuest && data.token;
     const emailMatches = okUser && String(data.user.email || '').toLowerCase() === email.toLowerCase();
     if (status === 200 && okUser && emailMatches) {
+      rememberEmail(email);
       applySession(data, { remember: true });
       clearAuthFormError();
-      state.auth.emailDraft = '';
+      state.auth.emailDraft = email;
+      state.auth.preferLogin = false;
+      state.auth.sessionExpired = false;
       await enterAuthedApp({
         toastMsg: state.session.account && state.session.account.setupComplete ? 'Welcome back' : 'Signed in — finish setup',
         preferStats: true,
@@ -156,10 +172,12 @@ export async function doLogout() {
   state.authed = false;
   state.auth.remember = true;
   state.auth.busy = false;
+  state.auth.preferLogin = true;
+  state.auth.sessionExpired = false;
   clearAuthFormError();
-  state.auth.emailDraft = '';
+  state.auth.emailDraft = readRememberedEmail();
   state.tutorial = { open: false, step: -1 };
-  state.stack = [];
+  state.stack = [{ screen: 'login', params: {} }];
   state.tab = 'stats';
   render();
   toast('Logged out');

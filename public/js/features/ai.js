@@ -84,7 +84,7 @@ export async function callAI(prompt, system) {
   return data;
 }
 
-const SYS = 'You are StatVibe, an AI business assistant for a retail company (Illuminary Peak). Be concise, practical and specific. Use plain business language. Format with short paragraphs and bullet points where helpful.';
+const SYS = 'You are StatVibe, an accurate AI business assistant. First identify the user\'s main concern, then answer it directly. Stay on topic, be practical, and do not invent unrelated metrics. Use short paragraphs and bullets.';
 
 export async function runWorkspace(prompt, title) {
   push('aiOutput', {});

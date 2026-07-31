@@ -10,14 +10,20 @@ function authErrorBanner() {
   const code = state.auth.formCode;
   let action = '';
   if (code === 'account_not_found') {
-    action = `<button type="button" class="auth-error-link" data-act="toRegister">Create an account</button>`;
+    action = `<button type="button" class="auth-error-link" data-act="toRegister">Create one</button>`;
   } else if (code === 'email_taken') {
     action = `<button type="button" class="auth-error-link" data-act="toLogin">Sign in</button>`;
   }
   return `<div class="auth-error" role="alert">${esc(msg)}${action ? ' ' + action : ''}</div>`;
 }
 
-screens.welcome = () => `
+screens.welcome = () => {
+  const returning = !!state.auth.preferLogin;
+  const primaryAct = returning ? 'toLogin' : 'toRegister';
+  const primaryLabel = returning ? 'Log in' : 'Create account';
+  const secondaryAct = returning ? 'toRegister' : 'toLogin';
+  const secondaryLabel = returning ? 'Create account' : 'Log in';
+  return `
   <div class="scroll" style="padding:70px 22px 14px;display:flex;flex-direction:column">
     <div class="flex items-center" style="gap:9px;margin-bottom:auto">
       <img src="${imgSrc('/logo-main.png', { w: 96, h: 96 })}" alt="StatVibe" style="width:34px;height:34px;border-radius:9px" />
@@ -25,7 +31,9 @@ screens.welcome = () => `
     </div>
     <div style="margin:28px 0 26px">
       <div style="font-size:30px;font-weight:700;line-height:1.15;letter-spacing:-.6px">Run the whole business from one screen.</div>
-      <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:12px">Real-time analytics, smart planning, and client messaging built for teams of any size, in any industry.</div>
+      <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:12px">${returning
+        ? 'Welcome back — log in with the same email and password to continue.'
+        : 'Real-time analytics, smart planning, and client messaging built for teams of any size, in any industry.'}</div>
     </div>
     <div class="stack gap-14" style="margin-bottom:26px">
       ${[['📊', 'Predictive dashboards', "See what's coming, not just what happened"],
@@ -34,8 +42,8 @@ screens.welcome = () => `
         .map(([e, t, s]) => `<div class="flex items-center gap-12"><div style="width:38px;height:38px;border-radius:11px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;font-size:18px">${e}</div><div><div style="font-size:13.5px;font-weight:600">${t}</div><div style="font-size:11.5px;color:var(--muted-2)">${s}</div></div></div>`).join('')}
     </div>
     <div class="stack gap-10">
-      <button class="btn" data-act="toRegister">Create account</button>
-      <button class="btn outline" data-act="toLogin">Log in</button>
+      <button class="btn" data-act="${primaryAct}">${primaryLabel}</button>
+      <button class="btn outline" data-act="${secondaryAct}">${secondaryLabel}</button>
     </div>
     <div style="text-align:center;margin-top:14px">
       <button type="button" data-act="guest" style="background:none;border:none;box-shadow:none;padding:6px;color:var(--muted-2);font:500 12.5px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent">Continue without an account</button>
@@ -43,6 +51,7 @@ screens.welcome = () => `
     <div style="text-align:center;margin-top:10px"><span data-act="download" style="font-size:12.5px;color:var(--teal);font-weight:600;cursor:pointer">📲 Download / install the app</span></div>
     <div style="text-align:center;font-size:10.5px;color:var(--muted-3);line-height:1.6;margin-top:20px">A new, upcoming project of<br><a href="https://illuminary-peak.vercel.app/" target="_blank" rel="noopener noreferrer" style="color:var(--muted);font-weight:600;text-decoration:none">Illuminary Peak Company</a> · 2026</div>
   </div>`;
+};
 
 screens.register = () => `
   ${appbar('Create account')}
@@ -78,7 +87,9 @@ screens.login = () => `
   ${appbar('Log in')}
   <div class="scroll" style="padding:14px 22px 24px">
     <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Log in to StatVibe</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Use the email and password from your registered account.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">${state.auth.sessionExpired
+      ? 'Your previous session ended. Log in with the same email and password — you do not need a new account.'
+      : 'Use the email and password from your registered account.'}</div>
     ${authErrorBanner()}
     <form id="loginForm" autocomplete="on">
       <div class="field"><label for="loginEmail">Email</label><input id="loginEmail" name="email" type="email" placeholder="you@business.com" autocomplete="username" required value="${esc(state.auth.emailDraft || '')}" /></div>

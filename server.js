@@ -9,6 +9,8 @@ const path = require('path');
 const store = require('./lib/store');
 const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
+const aiLib = require('./lib/ai');
+const paymongo = require('./lib/paymongo');
 const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, consume: consumeUsage } = usageLib;
 
 // Load .env (if present) into process.env before reading any config. Minimal,
@@ -188,19 +190,7 @@ async function listOllamaModels() {
 }
 
 function simulate(messages) {
-  const last = [...messages].reverse().find((m) => m.role === 'user');
-  const q = (last && last.content ? last.content : '').toLowerCase();
-  const money = () => '$' + (1.6 + Math.random() * 0.6).toFixed(2) + 'M';
-  if (q.includes('board') || q.includes('summary') || q.includes('update')) {
-    return `**Q3 Board Update — draft**\n\nRevenue reached ${money()} month-to-date, up ~12% over the prior period, with gross margin improving to ~61%. We are tracking to close the quarter ahead of plan.\n\n**Highlights**\n— Direct channel now the largest share of revenue.\n— Active customers growing with best-on-record retention.\n— Cash runway steady.\n\n**Risks & asks**\nChannel B ad spend is compressing margin; recommend a modest reduction and reallocation to the loyalty launch.`;
-  }
-  if (q.includes('price') || q.includes('margin') || q.includes('wholesale')) {
-    return `For a 500-unit wholesale order, a landed price around $58.80/unit (≈40% off retail) holds a healthy ~32% margin. I can generate the quote and PO whenever you're ready.`;
-  }
-  if (q.includes('idea') || q.includes('brainstorm') || q.includes('project')) {
-    return `Here are three angles worth exploring:\n\n1. **Loyalty program** — points on repeat orders, tiered perks for wholesale accounts.\n2. **Subscription boxes** — monthly curated bundles; pilot with your top 200 customers.\n3. **Same-day local delivery** — start in your densest metro and measure repeat rate.\n\nWant me to size the market for any of these?`;
-  }
-  return `Here's a quick take based on your business data:\n\n• Momentum is positive across your core metrics.\n• The biggest lever right now is protecting gross margin while you scale demand.\n• Suggested next step: run a short scenario forecast before committing budget.\n\n_(Simulated response — start Ollama or pull a model to get live AI output.)_`;
+  return aiLib.simulate(messages);
 }
 
 // --- Hosted LLM (OpenAI-compatible: Groq, OpenRouter, Together, OpenAI…) -----
@@ -214,7 +204,13 @@ async function callHostedAI(messages) {
   const r = await fetch(AI_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI_API_KEY },
-    body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.7, stream: false }),
+    body: JSON.stringify({
+      model: AI_MODEL,
+      messages,
+      temperature: 0.35,
+      max_tokens: 1800,
+      stream: false,
+    }),
   });
   if (!r.ok) throw new Error('status ' + r.status + ' ' + (await r.text()).slice(0, 160));
   const d = await r.json();
@@ -259,8 +255,8 @@ async function handleChat(req, res, body) {
 
   let payload;
   try { payload = JSON.parse(body || '{}'); } catch { return sendJSON(res, 400, { error: 'Invalid JSON' }); }
-  const messages = Array.isArray(payload.messages) ? payload.messages : [];
-  if (!messages.length) return sendJSON(res, 400, { error: 'messages[] required' });
+  const rawMessages = Array.isArray(payload.messages) ? payload.messages : [];
+  if (!rawMessages.length) return sendJSON(res, 400, { error: 'messages[] required' });
 
   let acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
   const gate = consumeUsage(acct, 1);
@@ -281,13 +277,37 @@ async function handleChat(req, res, body) {
   const requested = payload.model;
   const usage = usageView(acct);
 
-  // A cloud model that an admin has enabled has no real backend here, so it is
-  // answered by the simulator with a clear note. Otherwise use Ollama.
+  // Authoritative system prompt + business context so every answer targets the user's ask.
+  const messages = aiLib.enrichMessages(rawMessages, { account: acct, user });
   const promptText = messages.map((m) => m.content).join('\n');
   const isCloud = CLOUD_MODELS.some((c) => c.id === requested);
-  if (config.simulateOnly || isCloud) {
+
+  async function respondLive(runner) {
+    const { model, content, usage: tokUsage, note } = await runner();
+    metrics.byModel[model] = (metrics.byModel[model] || 0) + 1;
+    recordUsage(model, tokUsage, promptText, content);
+    return sendJSON(res, 200, { simulated: false, model, content, note, usage });
+  }
+
+  if (config.simulateOnly) {
     metrics.simulated++;
-    const note = isCloud ? `${requested} is a hosted model — simulated in this prototype.` : undefined;
+    const content = simulate(messages);
+    recordTokens('simulated', promptText, content);
+    return sendJSON(res, 200, { simulated: true, model: 'simulated', content, usage });
+  }
+
+  // Prefer real hosted/local AI over cloud-label simulation so answers stay accurate.
+  if (isCloud && hostedConfigured()) {
+    try {
+      return await respondLive(async () => {
+        const out = await callHostedAI(messages);
+        return { ...out, note: `${requested} routes through hosted AI for accurate answers.` };
+      });
+    } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI (cloud route): ' + e.message); }
+  }
+  if (isCloud) {
+    metrics.simulated++;
+    const note = `${requested} is unavailable live — answering from the focused simulator.`;
     const content = simulate(messages);
     recordTokens(requested || 'simulated', promptText, content);
     return sendJSON(res, 200, { simulated: true, model: requested || 'simulated', content, note, usage });
@@ -300,14 +320,9 @@ async function handleChat(req, res, body) {
   } else if (local.length) { model = local[0]; }
 
   if (!model) {
-    // No local Ollama model — use the hosted OpenAI-compatible API if configured
-    // (this is the production path on Vercel). Falls back to simulated on error.
     if (hostedConfigured()) {
       try {
-        const { model: hm, content, usage: tokUsage } = await callHostedAI(messages);
-        metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1;
-        recordUsage(hm, tokUsage, promptText, content);
-        return sendJSON(res, 200, { simulated: false, model: hm, content, usage });
+        return await respondLive(async () => callHostedAI(messages));
       } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
     }
     metrics.simulated++;
@@ -316,13 +331,12 @@ async function handleChat(req, res, body) {
 
   try {
     const { status, body: rb } = await ollamaRequest('POST', '/api/chat', {
-      model, messages, stream: false, options: { temperature: payload.temperature ?? 0.7 },
+      model, messages, stream: false, options: { temperature: payload.temperature ?? 0.35 },
     });
     if (status !== 200) throw new Error('Ollama status ' + status);
     const parsed = JSON.parse(rb);
     metrics.byModel[model] = (metrics.byModel[model] || 0) + 1;
     const content = parsed.message ? parsed.message.content : (parsed.response || '');
-    // Prefer Ollama's real token counts when present, else estimate.
     if (parsed.prompt_eval_count || parsed.eval_count) {
       const p = parsed.prompt_eval_count || 0, c = parsed.eval_count || 0;
       metrics.tokens.total += p + c; metrics.tokens.prompt += p; metrics.tokens.completion += c;
@@ -331,7 +345,13 @@ async function handleChat(req, res, body) {
     } else { recordTokens(model, promptText, content); }
     return sendJSON(res, 200, { simulated: false, model, content, usage });
   } catch (e) {
-    metrics.aiErrors++; metrics.simulated++;
+    metrics.aiErrors++;
+    if (hostedConfigured()) {
+      try {
+        return await respondLive(async () => callHostedAI(messages));
+      } catch (e2) { metrics.aiErrors++; log('warn', 'hosted AI after ollama fail: ' + e2.message); }
+    }
+    metrics.simulated++;
     log('warn', 'chat fallback: ' + e.message);
     return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), note: String(e.message || e), usage });
   }
@@ -504,10 +524,21 @@ async function getAuthUser(req) {
     log('warn', 'auth miss — session user gone ' + s.userId);
     return null;
   }
-  // Sliding 30-day window for registered accounts; shorter for guests.
+  // Sliding ~1-year window for registered accounts; shorter for guests.
+  // touchSession only persists periodically to reduce durable-store write races.
   const ttl = u.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
   await store.touchSession(token, Date.now() + ttl);
   return { user: u, token };
+}
+
+async function assertSessionSaved(token) {
+  // Cloudinary/CDN can lag briefly after write — retry a few times before failing the auth response.
+  for (let i = 0; i < 4; i++) {
+    const s = await store.getSession(token);
+    if (s) return s;
+    await new Promise((r) => setTimeout(r, 120 * (i + 1)));
+  }
+  return null;
 }
 
 function blankAccount() {
@@ -550,13 +581,24 @@ function sanitizeSupply(raw) {
 
 async function bootstrapUser(base) {
   const user = { id: auth.newId(base.isGuest ? 'g' : 'u'), tag: auth.newTag(), createdAt: Date.now(), ...base };
-  await store.createUser(user);
-  await store.setAccount(user.id, blankAccount());
-  const token = auth.newToken();
-  const ttl = user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
-  const expiresAt = Date.now() + ttl;
-  await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now() });
-  return { token, user, expiresAt };
+  try {
+    await store.createUser(user);
+    await store.setAccount(user.id, blankAccount());
+    const token = auth.newToken();
+    const ttl = user.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
+    const expiresAt = Date.now() + ttl;
+    await store.createSession({ token, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now() });
+    const saved = await assertSessionSaved(token);
+    if (!saved) {
+      const err = new Error('persist_verify_failed');
+      err.code = 'persist_failed';
+      throw err;
+    }
+    return { token, user, expiresAt };
+  } catch (e) {
+    log('error', 'bootstrapUser failed: ' + (e && e.message));
+    throw e;
+  }
 }
 
 async function sessionPayload(res, status, token, user, expiresAt) {
@@ -600,12 +642,19 @@ async function handleAuth(req, res, sub, body) {
       log('info', 'register rejected — email taken: ' + email);
       return sendJSON(res, 409, { error: 'An account already exists with that email. Sign in instead.', code: 'email_taken' });
     }
-    const { token, user, expiresAt } = await bootstrapUser({
-      isGuest: false, email, name,
-      phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
-    });
-    log('info', 'registered ' + user.email + ' (persistent session, login-ready)');
-    return sessionPayload(res, 201, token, user, expiresAt);
+    try {
+      const { token, user, expiresAt } = await bootstrapUser({
+        isGuest: false, email, name,
+        phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
+      });
+      log('info', 'registered ' + user.email + ' (persistent session, login-ready)');
+      return sessionPayload(res, 201, token, user, expiresAt);
+    } catch (e) {
+      return sendJSON(res, 503, {
+        error: 'Could not save your account. Please try again in a moment.',
+        code: 'persist_failed',
+      });
+    }
   }
   if (sub === 'login' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON', code: 'invalid_json' });
@@ -620,11 +669,11 @@ async function handleAuth(req, res, sub, body) {
     if (!password) return sendJSON(res, 400, { error: 'Enter your password', code: 'password_required' });
 
     const u = await store.getUserByEmail(email);
-    // Same gate as Google / Meta / banking: only existing registered accounts can sign in.
+    // Only existing registered accounts can sign in — do not push "create account" as the only path.
     if (!u || u.isGuest || !auth.isRegisteredUser(u)) {
       log('info', 'login failed — account not found: ' + email);
       return sendJSON(res, 401, {
-        error: "Couldn't find a StatVibe account with that email. Create an account to continue.",
+        error: 'No account for that email. Check the spelling, or create an account if you are new.',
         code: 'account_not_found',
       });
     }
@@ -633,19 +682,38 @@ async function handleAuth(req, res, sub, body) {
       return sendJSON(res, 401, { error: 'Incorrect email or password', code: 'invalid_credentials' });
     }
     clearLoginAttempts(rateKey);
-    const token = auth.newToken();
-    const expiresAt = Date.now() + SESSION_TTL;
-    await store.createSession({
-      token, userId: u.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
-    });
-    await store.updateUser(u.id, { lastLoginAt: Date.now() });
-    log('info', 'login ' + u.email + ' (session expires ' + new Date(expiresAt).toISOString() + ')');
-    return sessionPayload(res, 200, token, u, expiresAt);
+    try {
+      const token = auth.newToken();
+      const expiresAt = Date.now() + SESSION_TTL;
+      await store.createSession({
+        token, userId: u.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
+      });
+      await store.updateUser(u.id, { lastLoginAt: Date.now() });
+      const saved = await assertSessionSaved(token);
+      if (!saved) {
+        return sendJSON(res, 503, {
+          error: 'Could not save your session. Please try again in a moment.',
+          code: 'persist_failed',
+        });
+      }
+      log('info', 'login ' + u.email + ' (session expires ' + new Date(expiresAt).toISOString() + ')');
+      return sessionPayload(res, 200, token, u, expiresAt);
+    } catch (e) {
+      log('error', 'login persist failed: ' + (e && e.message));
+      return sendJSON(res, 503, {
+        error: 'Could not save your session. Please try again in a moment.',
+        code: 'persist_failed',
+      });
+    }
   }
   if (sub === 'guest' && req.method === 'POST') {
-    const { token, user, expiresAt } = await bootstrapUser({ isGuest: true, name: 'Guest' });
-    log('info', 'guest session started ' + user.id);
-    return sessionPayload(res, 201, token, user, expiresAt);
+    try {
+      const { token, user, expiresAt } = await bootstrapUser({ isGuest: true, name: 'Guest' });
+      log('info', 'guest session started ' + user.id);
+      return sessionPayload(res, 201, token, user, expiresAt);
+    } catch (e) {
+      return sendJSON(res, 503, { error: 'Could not start guest session. Try again.', code: 'persist_failed' });
+    }
   }
 
   // Authenticated below
@@ -676,7 +744,7 @@ async function handleAuth(req, res, sub, body) {
       token: nt, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
     });
     log('info', 'password changed ' + user.email);
-    return sendJSON(res, 200, { ok: true, token: nt, session: { expiresAt, ttlDays: 30 } });
+    return sendJSON(res, 200, { ok: true, token: nt, session: { expiresAt, ttlDays: 365 } });
   }
   return sendJSON(res, 404, { error: 'Unknown auth endpoint' });
 }
@@ -722,12 +790,7 @@ async function handleAccount(req, res, sub, body) {
     if (b.currency !== undefined) { if (!CURRENCY_CODES.has(b.currency)) return sendJSON(res, 400, { error: 'Unsupported currency' }); acct.currency = b.currency; }
     if (b.businessName !== undefined) acct.businessName = String(b.businessName).trim();
     if (b.industry !== undefined) acct.industry = b.industry;
-    if (b.plan !== undefined) {
-      const plan = String(b.plan);
-      if (!PLAN_PRICES.hasOwnProperty(plan)) return sendJSON(res, 400, { error: 'Unknown plan' });
-      if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise requires sales contact' });
-      acct.plan = plan;
-    }
+    // Plan changes only via paid PayMongo flow (/api/pay/status or /account/upgrade with verified intent).
     if (b.statsDraft !== undefined) acct.statsDraft = sanitizeStatsDraft(b.statsDraft);
     if (b.calc !== undefined) acct.calc = sanitizeCalc(b.calc);
     if (b.supply !== undefined) acct.supply = sanitizeSupply(b.supply);
@@ -739,15 +802,59 @@ async function handleAccount(req, res, sub, body) {
     const plan = String(b.plan || '');
     if (!PLAN_PRICES.hasOwnProperty(plan)) return sendJSON(res, 400, { error: 'Unknown plan' });
     if (plan === 'Enterprise') return sendJSON(res, 400, { error: 'Enterprise — our team will reach out' });
+    if (plan === 'Free') return sendJSON(res, 400, { error: 'Already on Free, or choose a paid plan' });
+
+    const amount = PLAN_PRICES[plan] || 0;
+    const intentId = b.paymentIntentId ? String(b.paymentIntentId) : '';
+
+    // Live mode (.env has PayMongo keys): plan upgrades ONLY after PayMongo confirms payment.
+    if (amount > 0 && paymongo.configured()) {
+      if (!intentId) {
+        return sendJSON(res, 402, {
+          error: 'Pay with the PayMongo QR first. Your plan upgrades only after payment succeeds.',
+          code: 'payment_required',
+          plan,
+          amount,
+          currency: 'PHP',
+        });
+      }
+      try {
+        const intent = await paymongo.retrievePaymentIntent(intentId);
+        if (!paymongo.intentSucceeded(intent)) {
+          return sendJSON(res, 402, {
+            error: 'Payment not completed yet. Scan the QR, then wait for confirmation.',
+            code: 'payment_pending',
+            status: paymongo.intentStatus(intent),
+          });
+        }
+        const row = await store.findPaymentBySourceId(intentId);
+        if (!row || row.userId !== user.id) {
+          return sendJSON(res, 404, { error: 'Payment not found for this account', code: 'payment_not_found' });
+        }
+        if (row.plan && row.plan !== plan) {
+          return sendJSON(res, 400, { error: 'Payment is for a different plan', code: 'plan_mismatch' });
+        }
+        const upgraded = await applyPaidPlan(user, plan, row);
+        return sendJSON(res, 200, {
+          ok: true,
+          account: upgraded.account,
+          payment: await store.findPaymentBySourceId(intentId),
+          usageLimit: PLAN_LIMITS[plan] || 1000,
+          usage: upgraded.usage,
+        });
+      } catch (e) {
+        return sendJSON(res, 502, { error: 'Could not verify payment: ' + e.message, code: 'paymongo_error' });
+      }
+    }
+
+    // No PayMongo keys in .env (local/tests only) — allow recording a demo upgrade.
     const acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
     const prev = acct.plan || 'Free';
     acct.plan = plan;
-    // Upgrading starts a fresh usage window at the new plan limit.
     acct.aiUsed = 0;
     acct.aiPeriodStart = Date.now();
     const normalized = ensureUsage(acct);
     await store.setAccount(user.id, normalized);
-    const amount = PLAN_PRICES[plan] || 0;
     const payment = await store.addPayment({
       id: auth.newId('pay'),
       userId: user.id,
@@ -756,12 +863,12 @@ async function handleAccount(req, res, sub, body) {
       plan,
       previousPlan: prev,
       amount,
-      currency: 'USD',
+      currency: 'PHP',
       status: amount > 0 ? 'demo' : 'free',
       source: 'in-app-upgrade',
       createdAt: Date.now(),
     });
-    log('info', `plan upgrade ${user.id} ${prev} → ${plan}`);
+    log('info', `plan upgrade ${user.id} ${prev} → ${plan} (demo — PayMongo not in .env)`);
     return sendJSON(res, 200, {
       ok: true,
       account: normalized,
@@ -982,17 +1089,35 @@ async function handleConversations(req, res, sub, body) {
   return sendJSON(res, 404, { error: 'Unknown conversation endpoint' });
 }
 
-// --- PayMongo (real when PAYMONGO_SECRET_KEY is set) -----------------------
+// --- PayMongo QR Ph (real when PAYMONGO_* keys are set) --------------------
+async function applyPaidPlan(user, plan, paymentRow) {
+  const acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
+  const prev = acct.plan || 'Free';
+  acct.plan = plan;
+  acct.aiUsed = 0;
+  acct.aiPeriodStart = Date.now();
+  const normalized = ensureUsage(acct);
+  await store.setAccount(user.id, normalized);
+  if (paymentRow && paymentRow.id) {
+    await store.updatePayment(paymentRow.id, { status: 'paid', paidAt: Date.now(), previousPlan: prev });
+  }
+  log('info', `plan upgrade ${user.id} ${prev} → ${plan} (paymongo)`);
+  return { account: normalized, usage: usageView(normalized), previousPlan: prev };
+}
+
 async function handlePay(req, res, sub, body) {
   const authed = await getAuthUser(req);
   if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
   const { user } = authed;
+
   if (sub === 'qr' && req.method === 'POST') {
     const b = parseJSON(body) || {};
-    const key = process.env.PAYMONGO_SECRET_KEY;
-    const amount = Math.max(0, Number(b.amount) || 0);
-    const plan = b.plan ? String(b.plan) : null;
-    if (!key) {
+    const plan = b.plan && PLAN_PRICES.hasOwnProperty(b.plan) ? String(b.plan) : null;
+    const amount = plan ? PLAN_PRICES[plan] : Math.max(0, Number(b.amount) || 0);
+    if (!amount || amount <= 0) {
+      return sendJSON(res, 400, { error: 'Choose a paid plan to generate a QR', code: 'invalid_amount' });
+    }
+    if (!paymongo.configured()) {
       await store.addPayment({
         id: auth.newId('pay'),
         userId: user.id,
@@ -1005,40 +1130,80 @@ async function handlePay(req, res, sub, body) {
         source: 'paymongo-qr',
         createdAt: Date.now(),
       });
-      return sendJSON(res, 200, { configured: false, message: 'PayMongo not configured. Set PAYMONGO_SECRET_KEY on the server to enable live QR payments.' });
+      return sendJSON(res, 200, {
+        configured: false,
+        amount,
+        currency: 'PHP',
+        plan,
+        message: 'PayMongo not configured. Set PAYMONGO_SECRET_KEY and PAYMONGO_PUBLIC_KEY on the server.',
+      });
     }
-    // Create a PayMongo QRPh source (amounts are in centavos).
-    const centavos = Math.max(2000, Math.round(amount * 100));
     try {
-      const payload = JSON.stringify({ data: { attributes: { amount: centavos, currency: 'PHP', type: 'qrph', redirect: { success: b.success || '/', failed: b.failed || '/' } } } });
-      const result = await httpsJSON('https://api.paymongo.com/v1/sources', payload, key);
-      const sourceId = result && result.data && result.data.id ? result.data.id : null;
-      await store.addPayment({
+      const qr = await paymongo.createQrPhPayment({
+        amountPesos: amount,
+        description: plan ? `StatVibe ${plan} plan` : 'StatVibe subscription',
+        metadata: { userId: user.id, plan: plan || '', email: user.email || '' },
+      });
+      const payment = await store.addPayment({
         id: auth.newId('pay'),
         userId: user.id,
         email: user.isGuest ? null : (user.email || null),
         name: user.name || null,
         plan,
-        amount,
+        amount: qr.amount,
         currency: 'PHP',
         status: 'pending',
         source: 'paymongo-qr',
-        sourceId,
+        sourceId: qr.intentId,
         createdAt: Date.now(),
       });
-      return sendJSON(res, 200, { configured: true, source: result });
-    } catch (e) { return sendJSON(res, 502, { configured: true, error: 'PayMongo request failed: ' + e.message }); }
+      return sendJSON(res, 200, {
+        configured: true,
+        plan,
+        amount: qr.amount,
+        currency: 'PHP',
+        intentId: qr.intentId,
+        status: qr.status,
+        qrImageUrl: qr.qrImageUrl,
+        redirectUrl: qr.redirectUrl,
+        paymentId: payment.id,
+        expiresAt: qr.expiresAt,
+      });
+    } catch (e) {
+      log('error', 'PayMongo QR failed: ' + e.message);
+      return sendJSON(res, 502, { configured: true, error: 'PayMongo request failed: ' + e.message });
+    }
   }
+
+  if (sub === 'status' && req.method === 'GET') {
+    const url = new URL(req.url, 'http://x');
+    const intentId = url.searchParams.get('intentId') || url.searchParams.get('id');
+    if (!intentId) return sendJSON(res, 400, { error: 'intentId required' });
+    const row = await store.findPaymentBySourceId(intentId);
+    if (!row || row.userId !== user.id) return sendJSON(res, 404, { error: 'Payment not found' });
+    if (!paymongo.configured()) {
+      return sendJSON(res, 200, { status: row.status, paid: false, configured: false });
+    }
+    try {
+      const intent = await paymongo.retrievePaymentIntent(intentId);
+      const status = paymongo.intentStatus(intent);
+      if (paymongo.intentSucceeded(intent) && row.plan && row.status !== 'paid') {
+        const upgraded = await applyPaidPlan(user, row.plan, row);
+        return sendJSON(res, 200, {
+          status: 'succeeded',
+          paid: true,
+          plan: row.plan,
+          account: upgraded.account,
+          usage: upgraded.usage,
+        });
+      }
+      return sendJSON(res, 200, { status, paid: status === 'succeeded', plan: row.plan, amount: row.amount });
+    } catch (e) {
+      return sendJSON(res, 502, { error: 'PayMongo status failed: ' + e.message });
+    }
+  }
+
   return sendJSON(res, 404, { error: 'Unknown pay endpoint' });
-}
-// Minimal HTTPS JSON POST with Basic auth (PayMongo uses secret key as username).
-function httpsJSON(url, payload, key) {
-  const https = require('https');
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), Authorization: 'Basic ' + Buffer.from(key + ':').toString('base64') } }, (r) => { let d = ''; r.on('data', (c) => (d += c)); r.on('end', () => { try { resolve(JSON.parse(d)); } catch { reject(new Error('bad response')); } }); });
-    req.on('error', reject); req.write(payload); req.end();
-  });
 }
 
 // --- Static files ---------------------------------------------------------

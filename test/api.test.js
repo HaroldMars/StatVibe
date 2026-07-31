@@ -12,6 +12,12 @@ process.env.ADMIN_TOKEN = 'test-token';
 // regardless of what's in the developer's .env.
 process.env.AI_API_URL = ''; process.env.AI_API_KEY = '';
 process.env.KV_REST_API_URL = ''; process.env.KV_REST_API_TOKEN = '';
+process.env.PAYMONGO_SECRET_KEY = '';
+process.env.PAYMONGO_PUBLIC_KEY = '';
+process.env.CLOUDINARY_CLOUD_NAME = '';
+process.env.CLOUDINARY_API_KEY = '';
+process.env.CLOUDINARY_API_SECRET = '';
+process.env.STATVIBE_CLOUD_STORE = '';
 // Isolate the database so tests never touch the dev data/db.json.
 const os = require('node:os');
 const pathMod = require('node:path');
@@ -121,7 +127,7 @@ test('POST /api/chat with a cloud model → simulated with note', async () => {
   const r = await req('POST', '/api/chat', { headers: auth(chatToken), body: { model: 'claude', messages: [{ role: 'user', content: 'hi' }] } });
   assert.equal(r.status, 200);
   assert.equal(r.json.simulated, true);
-  assert.match(r.json.note || '', /hosted/i);
+  assert.match(r.json.note || '', /unavailable|simulator|hosted/i);
 });
 
 test('unknown /api endpoint → 404', async () => {
@@ -518,10 +524,21 @@ test('/auth/me slides session expiry so clients stay signed in', async () => {
 });
 
 test('paymongo QR: clear "not configured" when no key set', async () => {
-  const r = await req('POST', '/api/pay/qr', { headers: auth(alphaToken), body: { amount: 79 } });
+  const r = await req('POST', '/api/pay/qr', { headers: auth(alphaToken), body: { plan: 'Pro' } });
   assert.equal(r.status, 200);
   assert.equal(r.json.configured, false);
   assert.match(r.json.message, /PayMongo/);
+});
+
+test('simulated AI answers the user concern instead of a random template', async () => {
+  const r = await req('POST', '/api/chat', {
+    headers: auth(alphaToken),
+    body: { messages: [{ role: 'user', content: 'How do I set a wholesale price for 200 units at 35% margin?' }] },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.simulated, true);
+  assert.match(r.json.content, /wholesale|price|margin|Direct answer/i);
+  assert.doesNotMatch(r.json.content, /Q3 Board Update/);
 });
 
 // --- Real cross-user messaging (Agent) ---

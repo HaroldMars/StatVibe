@@ -16,7 +16,7 @@ export const state = {
   lastAIOutput: null,
   alerts: null,          // set on first render
   settings: { blend: true, appearance: 'System', notifications: true },
-  auth: { remember: true, busy: false, formError: '', formCode: '', emailDraft: '' },
+  auth: { remember: true, busy: false, formError: '', formCode: '', emailDraft: '', preferLogin: false, sessionExpired: false },
   tutorial: { open: false, step: -1 },
   profile: { name: 'Jordan Doyle', email: 'jordan@illuminarypeak.co', role: 'Owner', phone: '+1 (555) 018-2245', tz: 'Pacific Time · PT' },
   workspace: 'Illuminary Peak',

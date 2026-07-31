@@ -51,7 +51,7 @@ export async function agentDraft() {
   if (scroll) { const el = document.createElement('div'); el.className = 'bubble ai'; el.innerHTML = `<div class="ai-tag">${I.spark('#7FE3C8', 13, true)}AgentTech drafting</div><div class="typing" style="color:#7FE3C8"><i></i><i></i><i></i></div>`; scroll.appendChild(el); scrollChat(); }
   const prompt = `You are messaging on behalf of the business "${bizName()}" to ${state.chat.other.name}. Their last message: "${lastTheirs ? lastTheirs.text : '(none yet — write a friendly opener)'}". Draft a short, warm, professional reply suited to their message. Under 55 words. No preamble.`;
   try {
-    const d = await callAI(prompt, 'You are AgentTech, an AI messaging assistant that drafts replies to clients and partners for a business owner. Be concise, friendly and specific.');
+    const d = await callAI(prompt, 'You are AgentTech, an AI messaging assistant for a business owner. Identify what the other person needs, then draft a concise, friendly, on-topic reply. Do not invent facts the owner did not provide.');
     const text = d.content.trim();
     if (state.session.agentAutoReply) {
       const r = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text } });

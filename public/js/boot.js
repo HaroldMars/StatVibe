@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { STORAGE, api, applySession, clearTokenStorage } from './api.js';
+import { STORAGE, api, applySession, clearTokenStorage, readRememberedEmail } from './api.js';
 import { loadStatsDraft } from './utils.js';
 import { applyTheme } from './theme.js';
 import { go, render, currentScreen } from './router.js';
@@ -32,6 +32,14 @@ export function applyHash() {
   else if (subs.includes(h)) { state.stack = [{ screen: h, params: {} }]; render(); }
 }
 
+function markReturningUser() {
+  state.auth.preferLogin = true;
+  state.auth.sessionExpired = true;
+  if (!state.auth.emailDraft) state.auth.emailDraft = readRememberedEmail();
+  // Send returning users to Log in — not Create account.
+  state.stack = [{ screen: 'login', params: {} }];
+}
+
 export async function boot() {
   try { const th = localStorage.getItem(STORAGE.THEME); if (th) state.settings.appearance = th; } catch { /* ignore */ }
   applyTheme();
@@ -39,6 +47,9 @@ export async function boot() {
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.settings.appearance === 'System') applyTheme(); });
   state.authed = false;
   state.auth.remember = true;
+  state.auth.preferLogin = false;
+  state.auth.sessionExpired = false;
+  if (!state.auth.emailDraft) state.auth.emailDraft = readRememberedEmail();
 
   // Prefer durable localStorage token (registered accounts). Guests use sessionStorage only.
   let tok = null;
@@ -68,9 +79,13 @@ export async function boot() {
     state.session.token = tok;
     let status, data;
     ({ status, data } = await api('/auth/me'));
-    // One retry — serverless/Cloudinary can briefly miss a just-written session.
+    // Retries — serverless/Cloudinary can briefly miss a just-written session.
     if (!(status === 200 && data && data.user && data.token)) {
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 400));
+      ({ status, data } = await api('/auth/me'));
+    }
+    if (!(status === 200 && data && data.user && data.token) && status !== 0) {
+      await new Promise((r) => setTimeout(r, 700));
       ({ status, data } = await api('/auth/me'));
     }
     const valid = status === 200 && data && data.user && data.token;
@@ -80,8 +95,11 @@ export async function boot() {
       state.session.token = null;
       state.session.user = null;
       state.authed = false;
+      markReturningUser();
     } else if (valid) {
       applySession(data, { remember: !data.user.isGuest });
+      state.auth.preferLogin = false;
+      state.auth.sessionExpired = false;
       state.stack = [];
       if (state.session.account && state.session.account.setupComplete) {
         state.tab = 'stats';
@@ -92,11 +110,12 @@ export async function boot() {
       state.session.token = tok;
       state.authed = false;
     } else {
-      // Server explicitly rejected the session (logout elsewhere, deleted account, etc.).
+      // Server rejected the session — keep the email and open Log in (do not force Create account).
       clearTokenStorage();
       state.session.token = null;
       state.session.user = null;
       state.authed = false;
+      if (fromLocal) markReturningUser();
     }
   }
   state.session.restoring = false;

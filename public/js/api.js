@@ -5,6 +5,7 @@ export const STORAGE = {
   LOCAL_TOKEN: 'sv_token',
   SESSION_TOKEN: 'sv_session_token',
   TOKEN_EXPIRES: 'sv_token_expires',
+  LAST_EMAIL: 'sv_last_email',
   THEME: 'sv_theme',
 };
 
@@ -33,6 +34,18 @@ export function clearTokenStorage() {
     localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
     localStorage.removeItem('sv_remember');
   } catch { /* ignore */ }
+}
+
+export function rememberEmail(email) {
+  try {
+    const e = String(email || '').trim().toLowerCase();
+    if (e) localStorage.setItem(STORAGE.LAST_EMAIL, e);
+  } catch { /* ignore */ }
+}
+
+export function readRememberedEmail() {
+  try { return localStorage.getItem(STORAGE.LAST_EMAIL) || ''; }
+  catch { return ''; }
 }
 
 /**

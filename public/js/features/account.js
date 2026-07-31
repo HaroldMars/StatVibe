@@ -161,25 +161,84 @@ export function qrSheet() {
     <button class="btn" data-act="copyTag" data-tag="${esc(tag)}" style="margin-top:12px">Copy my code</button>
     <button class="btn outline" data-close style="margin-top:8px">Done</button>`);
 }
-export async function paymentSheet() {
+export async function paymentSheet(planName) {
   const u = state.session.user || {};
-  const priceMap = { Free: 0, Pro: 29, Business: 79 };
-  const amount = priceMap[state.plan] || 79;
-  openSheet(`<h3>Payment method</h3>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Pay via GCash, Maya or bank through <b>PayMongo</b> (QRPh). Scan the QR to pay for your subscription.</div>
+  const plan = planName && planName !== 'Free' ? planName : null;
+  if (!plan) {
+    openSheet(`<h3>Payment</h3>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Choose Pro or Business under Plans to pay with PayMongo QR.</div>
+      <button class="btn" data-close>Close</button>`);
+    return;
+  }
+  openSheet(`<h3>Pay for ${esc(plan)}</h3>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Scan this <b>PayMongo</b> QR with GCash, Maya, or any QR Ph bank app. Your plan upgrades <b>only after payment succeeds</b>.</div>
     <div id="payBox" style="text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px">
       <div class="typing" style="color:var(--muted)"><i></i><i></i><i></i></div>
-      <div style="font-size:12px;color:var(--muted-2);margin-top:10px">Requesting PayMongo QR…</div>
+      <div style="font-size:12px;color:var(--muted-2);margin-top:10px">Creating secure QR…</div>
     </div>
-    <button class="btn" data-close style="margin-top:14px">Done</button>`);
-  const { status, data } = await api('/pay/qr', { method: 'POST', body: { amount } });
-  const box = document.getElementById('payBox'); if (!box) return;
-  if (status === 200 && data.configured && data.source) {
-    box.innerHTML = `${qrPlaceholder('paymongo:' + (data.source.data && data.source.data.id || u.tag), 168)}<div style="font-size:12px;color:var(--muted);margin-top:12px">PayMongo QRPh · ₱${amount}</div><div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:4px">Live payment source created</div>`;
+    <div id="payHint" style="font-size:11.5px;color:var(--muted-2);text-align:center;margin-top:10px;line-height:1.45"></div>
+    <button class="btn" data-close style="margin-top:14px">Close</button>`);
+
+  const { status, data } = await api('/pay/qr', { method: 'POST', body: { plan } });
+  const el = document.getElementById('payBox'); if (!el) return;
+  const hint = document.getElementById('payHint');
+
+  if (status === 200 && data.configured && data.qrImageUrl && data.intentId) {
+    const pesos = Number(data.amount) || 0;
+    el.innerHTML = `<img src="${esc(data.qrImageUrl)}" alt="PayMongo QR Ph" width="200" height="200" style="width:200px;height:200px;object-fit:contain;background:#fff;border-radius:8px"/>
+      <div style="font-size:13px;font-weight:600;margin-top:12px">Pay ₱${pesos.toLocaleString()} · ${esc(plan)}</div>
+      <div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:4px">Waiting for payment…</div>`;
+    if (hint) hint.textContent = 'Keep this open. We upgrade your plan automatically when PayMongo confirms the payment.';
+    pollPaymongo(data.intentId, plan);
+  } else if (status === 200 && !data.configured) {
+    el.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--amber)">PayMongo not configured</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.45">Add <code>PAYMONGO_SECRET_KEY</code> and <code>PAYMONGO_PUBLIC_KEY</code> to the server <code>.env</code>. Plans stay Free until a real payment succeeds.</div>`;
   } else {
-    box.innerHTML = `${qrPlaceholder('paymongo:demo:' + (u.tag || 'guest') + ':' + state.plan, 168)}<div style="font-size:12px;color:var(--muted);margin-top:12px">PayMongo QRPh · ₱${amount}</div><div style="font-size:11px;color:var(--amber);font-weight:600;margin-top:4px">${esc((data && data.message) || 'Test mode — add PayMongo keys on the server to accept live payments')}</div>`;
+    el.innerHTML = `<div style="font-size:13px;color:var(--rose);font-weight:600">Could not create payment</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">${esc((data && (data.error || data.message)) || 'Try again')}</div>`;
   }
 }
+
+let payPollTimer = null;
+function stopPayPoll() {
+  if (payPollTimer) { clearInterval(payPollTimer); payPollTimer = null; }
+}
+
+function pollPaymongo(intentId, plan) {
+  stopPayPoll();
+  if (!intentId) return;
+  let tries = 0;
+  payPollTimer = setInterval(async () => {
+    tries += 1;
+    if (tries > 60) { stopPayPoll(); const h = document.getElementById('payHint'); if (h) h.textContent = 'Still waiting — reopen Plans after you pay.'; return; }
+    const { status, data } = await api('/pay/status?intentId=' + encodeURIComponent(intentId));
+    if (status === 200 && data.paid && data.account) {
+      stopPayPoll();
+      state.session.account = data.account;
+      state.plan = data.plan || plan || data.account.plan;
+      if (data.usage) {
+        state.usage = {
+          used: data.usage.used || 0,
+          limit: data.usage.limit || 1000,
+          resetDays: data.usage.resetDays,
+          resetAt: data.usage.resetAt,
+          period: data.usage.period || 'month',
+          remaining: data.usage.remaining,
+        };
+      }
+      const box = document.getElementById('payBox');
+      if (box) {
+        box.innerHTML = `<div style="font-size:28px;margin-bottom:8px">✓</div>
+          <div style="font-size:15px;font-weight:700;color:var(--teal)">Payment received</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:6px">You're on ${esc(state.plan)}</div>`;
+      }
+      render();
+      toast(`Upgraded to ${state.plan} ✓`);
+      setTimeout(() => closeSheet(), 1200);
+    }
+  }, 3000);
+}
+
 export function editBusinessSheet() {
   const acct = state.session.account || {};
   openSheet(`<h3>Business name</h3><div class="field" style="margin-top:12px"><input id="bnName" value="${esc(acct.businessName || '')}"/></div><button class="btn" id="bnSave">Save</button>`);
@@ -200,24 +259,10 @@ export function currencySheet() {
   }); }, 30);
 }
 
-/* ---- Plans ---- */
+/* ---- Plans — upgrade only after PayMongo payment succeeds ---- */
 export async function doUpgrade(name) {
   if (name === 'Enterprise') { toast('Enterprise — our team will reach out'); return; }
   if (name === 'Free' || name === state.plan) { toast(name === state.plan ? 'Already on this plan' : 'You are on Free'); return; }
-  const { status, data } = await api('/account/upgrade', { method: 'POST', body: { plan: name } });
-  if (status === 200) {
-    state.session.account = data.account;
-    state.plan = name;
-    if (data.usage) {
-      state.usage = {
-        used: data.usage.used || 0,
-        limit: data.usage.limit || data.usageLimit || 1000,
-        resetDays: data.usage.resetDays,
-        resetAt: data.usage.resetAt,
-        period: data.usage.period || 'month',
-        remaining: data.usage.remaining,
-      };
-    } else if (data.usageLimit) state.usage.limit = data.usageLimit;
-    render(); toast(`Upgraded to ${name} ✓`);
-  } else toast(data.error || 'Upgrade failed');
+  // Always collect payment first. Plan changes only when /pay/status sees a succeeded charge.
+  await paymentSheet(name);
 }

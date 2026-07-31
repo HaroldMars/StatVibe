@@ -293,9 +293,9 @@ screens.plans = () => {
     ? 'no reset needed'
     : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
   const plans = [
-    { name: 'Free', price: '$0', desc: '1,000 AI actions per week · core dashboard & calculator · weekly reset' },
-    { name: 'Pro', price: '$29', per: '/mo', desc: '10,000 AI actions / month · 3 workspaces · project hub' },
-    { name: 'Business', price: '$79', per: '/mo', pop: true, desc: '50,000 AI actions / month · all models & Blend · AgentTech · forecasting' },
+    { name: 'Free', price: '₱0', desc: '1,000 AI actions per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '10,000 AI actions / month · 3 workspaces · project hub · PayMongo QR' },
+    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '50,000 AI actions / month · all models & Blend · AgentTech · forecasting · PayMongo QR' },
     { name: 'Enterprise', price: 'Custom', desc: 'Unlimited usage · SSO · audit logs · dedicated support & SLAs' },
   ];
   return `
