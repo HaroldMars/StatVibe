@@ -1,7 +1,8 @@
 import { state } from '../state.js';
-import { api } from '../api.js';
+import { api, applyUsage } from '../api.js';
 import { app, esc, toast } from '../utils.js';
 import { push, render } from '../router.js';
+import { openSheet, closeSheet } from '../sheet.js';
 
 export async function loadModels() {
   try {
@@ -36,18 +37,51 @@ export async function loadModels() {
   }
 }
 
+export function showQuotaSheet(data = {}) {
+  const u = data.usage || state.usage;
+  const days = u.resetDays == null ? 7 : u.resetDays;
+  const period = u.period === 'week' ? 'week' : 'month';
+  openSheet(`<div class="tutorial-sheet">
+    <h3>AI limit reached</h3>
+    <p class="tutorial-copy">${esc(data.error || `You've used all ${u.limit} Free AI actions this ${period}.`)}</p>
+    <p class="tutorial-copy" style="margin-top:4px">Upgrade for more capacity, or wait <b>${days} day${days === 1 ? '' : 's'}</b> for your Free weekly reset.</p>
+    <button type="button" class="btn" data-act="goto" data-s="plans">View subscriptions</button>
+    <button type="button" class="btn ghost" data-close style="margin-top:8px">Not now</button>
+  </div>`);
+  // Wire plans jump from sheet (outside #app click switch uses runSheetAct for some acts).
+  setTimeout(() => {
+    const sheet = document.getElementById('sheet');
+    if (!sheet) return;
+    const btn = sheet.querySelector('[data-act="goto"][data-s="plans"]');
+    if (btn) btn.onclick = () => { closeSheet(); state.stack = [{ screen: 'plans', params: {} }]; render(); };
+    const close = sheet.querySelector('[data-close]');
+    if (close) close.onclick = () => closeSheet();
+  }, 30);
+}
+
 export async function callAI(prompt, system) {
+  if (!state.authed || !(state.session.user) || state.session.user.isGuest) {
+    return { error: 'Sign in with a free account to use AI.', code: 'not_signed_in', upgradeRequired: true };
+  }
   const active = [...state.models.active];
   const model = active[0] || (state.models.engines[0] && state.models.engines[0].id);
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
   messages.push({ role: 'user', content: prompt });
-  const r = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages }),
-  });
-  return r.json();
+  const { status, data } = await api('/chat', { method: 'POST', body: { model, messages } });
+  if (data && data.usage) applyUsage(data.usage);
+  if (status === 402 || (data && data.code === 'quota_exceeded')) {
+    showQuotaSheet(data);
+    return data;
+  }
+  if (status === 401) {
+    toast(data.error || 'Sign in to use AI');
+    return data;
+  }
+  if (status !== 200) {
+    return data && data.error ? data : { error: 'AI request failed', content: '' };
+  }
+  return data;
 }
 
 const SYS = 'You are StatVibe, an AI business assistant for a retail company (Illuminary Peak). Be concise, practical and specific. Use plain business language. Format with short paragraphs and bullet points where helpful.';
@@ -60,16 +94,29 @@ export async function runWorkspace(prompt, title) {
   if (card) card.innerHTML = `<div class="typing" style="color:var(--muted)"><i></i><i></i><i></i></div><div style="font-size:12px;color:var(--muted-2);margin-top:8px">Generating with ${esc((state.models.active.size && [...state.models.active][0]) || 'AI')}…</div>`;
   try {
     const d = await callAI(prompt, SYS);
+    if (d && (d.code === 'quota_exceeded' || d.upgradeRequired && !d.content)) {
+      state.lastAIOutput = {
+        title: title || 'AI Output',
+        content: d.error || 'AI limit reached. Upgrade your plan or wait for the Free weekly reset.',
+        model: 'quota',
+        simulated: true,
+        engines: [],
+      };
+      render();
+      return;
+    }
     const engines = state.models.blend && state.models.active.size > 1
       ? [...state.models.active].map((id) => (state.models.engines.find((e) => e.id === id) || {}).label || id)
       : [d.model];
-    state.lastAIOutput = { title: title || 'AI Output', content: d.content, model: d.model, simulated: d.simulated, engines };
+    state.lastAIOutput = { title: title || 'AI Output', content: d.content || d.error || 'No response', model: d.model, simulated: d.simulated, engines };
     render();
     // Save to AI workspace history (best-effort).
-    try {
-      const { status, data } = await api('/ai/history', { method: 'POST', body: { title: title || 'AI Output', prompt, content: d.content, model: d.model, simulated: d.simulated } });
-      if (status === 201) state.session.history.unshift(data.entry);
-    } catch { /* ignore */ }
+    if (d.content && !d.code) {
+      try {
+        const { status, data } = await api('/ai/history', { method: 'POST', body: { title: title || 'AI Output', prompt, content: d.content, model: d.model, simulated: d.simulated } });
+        if (status === 201) state.session.history.unshift(data.entry);
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     state.lastAIOutput = { title: title || 'AI Output', content: 'Could not reach the AI service. ' + e.message, model: 'error', simulated: true, engines: [] };
     render();

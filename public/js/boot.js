@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { STORAGE, api, applySession, clearTokenStorage, storedSessionStillValid } from './api.js';
+import { STORAGE, api, applySession, clearTokenStorage } from './api.js';
 import { loadStatsDraft } from './utils.js';
 import { applyTheme } from './theme.js';
 import { go, render, currentScreen } from './router.js';
@@ -49,12 +49,8 @@ export async function boot() {
     else tok = sessionStorage.getItem(STORAGE.SESSION_TOKEN);
   } catch { /* ignore */ }
 
-  // Client-side expiry gate for 30-day auto-login (server still validates).
-  if (tok && fromLocal && !storedSessionStillValid()) {
-    clearTokenStorage();
-    tok = null;
-    fromLocal = false;
-  }
+  // Do NOT clear localStorage based on client clock alone — that caused surprise logouts.
+  // Always ask the server; only clear when /auth/me rejects the token.
 
   // Logo splash only when a previous session exists; otherwise skip straight to welcome.
   state.session.restoring = !!tok;
@@ -70,7 +66,13 @@ export async function boot() {
 
   if (tok) {
     state.session.token = tok;
-    const { status, data } = await api('/auth/me');
+    let status, data;
+    ({ status, data } = await api('/auth/me'));
+    // One retry — serverless/Cloudinary can briefly miss a just-written session.
+    if (!(status === 200 && data && data.user && data.token)) {
+      await new Promise((r) => setTimeout(r, 350));
+      ({ status, data } = await api('/auth/me'));
+    }
     const valid = status === 200 && data && data.user && data.token;
     // Persisted localStorage sessions must be real registered accounts — never restore a guest from localStorage.
     if (valid && fromLocal && data.user.isGuest) {
@@ -85,7 +87,12 @@ export async function boot() {
         state.tab = 'stats';
         await Promise.all([loadIdeas(), loadHistory(), loadConversations()]);
       }
+    } else if (status === 0) {
+      // Offline with a stored token — keep the token; show app shell when possible after reconnect.
+      state.session.token = tok;
+      state.authed = false;
     } else {
+      // Server explicitly rejected the session (logout elsewhere, deleted account, etc.).
       clearTokenStorage();
       state.session.token = null;
       state.session.user = null;
