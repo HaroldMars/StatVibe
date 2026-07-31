@@ -450,7 +450,7 @@ screens.welcome = () => `
     </div>
     <div style="margin:28px 0 26px">
       <div style="font-size:30px;font-weight:700;line-height:1.15;letter-spacing:-.6px">Run the whole business from one screen.</div>
-      <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:12px">Real-time analytics, AI planning, and client messaging — built for teams of any size, in any industry.</div>
+      <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:12px">Real-time analytics, smart planning, and client messaging built for teams of any size, in any industry.</div>
     </div>
     <div class="stack gap-14" style="margin-bottom:26px">
       ${[['📊', 'Predictive dashboards', "See what's coming, not just what happened"],
