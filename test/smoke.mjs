@@ -65,7 +65,7 @@ function connectWS(url) {
 async function main() {
   if (!chrome) { console.log('No Chrome found — skipping browser smoke test (API tests still cover the server).'); process.exit(0); }
 
-  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token', AI_API_URL: '', AI_API_KEY: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '' } });
+  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token', AI_API_URL: '', AI_API_KEY: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '', MONGO_URI: '', MONGODB_URI: '' } });
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-smoke-'));
   let browser;
   try {

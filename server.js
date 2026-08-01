@@ -6,16 +6,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const store = require('./lib/store');
-const auth = require('./lib/auth');
-const usageLib = require('./lib/usage');
-const aiLib = require('./lib/ai');
-const paymongo = require('./lib/paymongo');
-const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 
-// Load .env (if present) into process.env before reading any config. Minimal,
-// dependency-free parser: `KEY=value`, `#` comments, optional quotes. Existing
-// environment variables always win over the file.
+// Load .env BEFORE requiring store / paymongo so MONGO_URI and keys are visible.
 function loadEnvFile() {
   try {
     const txt = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
@@ -29,6 +21,13 @@ function loadEnvFile() {
   } catch { /* no .env file — fine */ }
 }
 loadEnvFile();
+
+const store = require('./lib/store');
+const auth = require('./lib/auth');
+const usageLib = require('./lib/usage');
+const aiLib = require('./lib/ai');
+const paymongo = require('./lib/paymongo');
+const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 
 const VERSION = '1.0.0';
 const PORT = Number(process.env.PORT) || 4173;

@@ -18,6 +18,8 @@ process.env.CLOUDINARY_CLOUD_NAME = '';
 process.env.CLOUDINARY_API_KEY = '';
 process.env.CLOUDINARY_API_SECRET = '';
 process.env.STATVIBE_CLOUD_STORE = '';
+process.env.MONGO_URI = '';
+process.env.MONGODB_URI = '';
 // Isolate the database so tests never touch the dev data/db.json.
 const os = require('node:os');
 const pathMod = require('node:path');

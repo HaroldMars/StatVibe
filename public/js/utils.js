@@ -15,6 +15,34 @@ export function currency() {
   return (state.session.currencies || []).find((c) => c.code === code) || { code, symbol: '$', dp: 2 };
 }
 export const money = (n) => { const c = currency(); return c.symbol + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: c.dp, maximumFractionDigits: c.dp }); };
+
+// Plan list prices are defined in PHP (PayMongo charges PHP). Display converts to account currency.
+export const PLAN_PRICES_PHP = { Free: 0, Pro: 1699, Business: 4499, Enterprise: null };
+/** Approximate units of each currency per 1 PHP (display-only; not live FX). */
+const FX_FROM_PHP = {
+  PHP: 1,
+  USD: 1 / 58,
+  EUR: 1 / 63,
+  GBP: 1 / 74,
+  CNY: 1 / 8,
+  JPY: 1 / 0.39,
+  SGD: 1 / 43,
+  AUD: 1 / 37,
+  CAD: 1 / 42,
+  INR: 1 / 0.69,
+  AED: 1 / 15.8,
+  MYR: 1 / 13,
+};
+export function phpToAccount(amountPhp) {
+  const code = currency().code || 'USD';
+  const rate = FX_FROM_PHP[code] != null ? FX_FROM_PHP[code] : FX_FROM_PHP.USD;
+  return Number(amountPhp || 0) * rate;
+}
+export function planPriceLabel(planName) {
+  const php = PLAN_PRICES_PHP[planName];
+  if (php == null) return 'Custom';
+  return money(phpToAccount(php));
+}
 export const statNum = (v) => {
   const n = Number(String(v || '').replace(/[^\d.-]/g, ''));
   return Number.isFinite(n) ? n : 0;

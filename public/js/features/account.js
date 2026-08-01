@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { api, clearTokenStorage } from '../api.js';
-import { esc, toast } from '../utils.js';
+import { esc, toast, money, phpToAccount, PLAN_PRICES_PHP } from '../utils.js';
 import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
 
@@ -184,9 +184,11 @@ export async function paymentSheet(planName) {
   const hint = document.getElementById('payHint');
 
   if (status === 200 && data.configured && data.qrImageUrl && data.intentId) {
-    const pesos = Number(data.amount) || 0;
+    const pesos = Number(data.amount) || PLAN_PRICES_PHP[plan] || 0;
+    const local = money(phpToAccount(pesos));
     el.innerHTML = `<img src="${esc(data.qrImageUrl)}" alt="PayMongo QR Ph" width="200" height="200" style="width:200px;height:200px;object-fit:contain;background:#fff;border-radius:8px"/>
-      <div style="font-size:13px;font-weight:600;margin-top:12px">Pay ₱${pesos.toLocaleString()} · ${esc(plan)}</div>
+      <div style="font-size:13px;font-weight:600;margin-top:12px">${esc(local)} · ${esc(plan)}</div>
+      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">PayMongo charges ₱${pesos.toLocaleString()} (QR Ph)</div>
       <div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:4px">Waiting for payment…</div>`;
     if (hint) hint.textContent = 'Keep this open. We upgrade your plan automatically when PayMongo confirms the payment.';
     pollPaymongo(data.intentId, plan);

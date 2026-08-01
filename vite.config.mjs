@@ -5,13 +5,19 @@ import fs from 'node:fs';
 import { defineConfig } from 'vite';
 
 const require = createRequire(import.meta.url);
-const { requestHandler } = require('./server.js');
+
+// Lazy-load the API handler only for vite dev/preview. Requiring server.js at
+// config load time opens MongoDB and keeps the event loop alive, which hangs
+// `vite build` (and therefore Vercel static-build) forever.
+function getRequestHandler() {
+  return require('./server.js').requestHandler;
+}
 
 function localApiPlugin() {
   const attach = (middlewares) => {
     middlewares.use((req, res, next) => {
       if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
-      if (req.url && req.url.startsWith('/api/')) return requestHandler(req, res);
+      if (req.url && req.url.startsWith('/api/')) return getRequestHandler()(req, res);
       return next();
     });
   };

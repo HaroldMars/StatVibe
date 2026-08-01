@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { I } from '../icons.js';
 import { appbar } from '../chrome.js';
 import {
-  esc, money, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
+  esc, money, mdToHtml, initials, bizName, currency, planPriceLabel, CLOUD, guestBanner,
 } from '../utils.js';
 
 export const screens = {};
@@ -293,15 +293,16 @@ screens.plans = () => {
     ? 'no reset needed'
     : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
   const plans = [
-    { name: 'Free', price: '₱0', desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
-    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub · PayMongo QR' },
-    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting · PayMongo QR' },
-    { name: 'Enterprise', price: 'Custom', desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
+    { name: 'Free', price: planPriceLabel('Free'), desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', price: planPriceLabel('Pro'), per: '/mo', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub · PayMongo QR' },
+    { name: 'Business', price: planPriceLabel('Business'), per: '/mo', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting · PayMongo QR' },
+    { name: 'Enterprise', price: planPriceLabel('Enterprise'), desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
   ];
+  const curCode = currency().code || 'USD';
   return `
   ${appbar('Plans')}
   <div class="scroll pad" style="padding-top:6px">
-    <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan}</div></div>
+    <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan} · prices in ${esc(curCode)}</div></div>
     <div class="card mb-14">
       <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this ${period}</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
       <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
