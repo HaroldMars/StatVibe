@@ -65,7 +65,7 @@ function connectWS(url) {
 async function main() {
   if (!chrome) { console.log('No Chrome found — skipping browser smoke test (API tests still cover the server).'); process.exit(0); }
 
-  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token', AI_API_URL: '', AI_API_KEY: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '' } });
+  const server = spawn(process.execPath, ['server.js'], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), HOST: '127.0.0.1', OLLAMA_HOST: 'http://127.0.0.1:9', ADMIN_TOKEN: 'smoke-token', AI_API_URL: '', AI_API_KEY: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '' } });
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-smoke-'));
   let browser;
   try {
@@ -91,7 +91,7 @@ async function main() {
     await sleep(1800); // let boot + loadModels finish
 
     // 1. Welcome renders with logo + credit
-    const welcome = await ev(`document.body.innerText.includes('Run the whole business') && !!document.querySelector('img[src*="logo.svg"]') && document.body.innerText.includes('Illuminary Peak Company')`);
+    const welcome = await ev(`document.body.innerText.includes('Run the whole business') && !!document.querySelector('img[src*="logo-main.png"], img[src*="logo.svg"]') && document.body.innerText.includes('Illuminary Peak Company')`);
     welcome ? ok('welcome renders (logo + credit)') : fail('welcome renders (logo + credit)');
 
     // 2. Continue as guest → business setup wizard
