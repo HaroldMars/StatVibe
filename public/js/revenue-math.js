@@ -114,7 +114,7 @@ export function seriesToSvg(series, { width = 300, height = 100, padY = 14, padX
 
 /** Stroke / fill for net-volume charts (green up, red down) — Stripe/Shopify style. */
 export function chartTone(series) {
-  const d = trendDelta(series);
+  const d = periodDelta(series);
   if (d.direction === 'down') {
     return { stroke: '#DC2626', fillId: 'svRevDown', stop: '#DC2626', direction: d.direction, delta: d };
   }
