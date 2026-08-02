@@ -9,7 +9,7 @@ const path = require('path');
 const store = require('./lib/store');
 const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
-const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, consume: consumeUsage } = usageLib;
+const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 
 // Load .env (if present) into process.env before reading any config. Minimal,
 // dependency-free parser: `KEY=value`, `#` comments, optional quotes. Existing
@@ -247,11 +247,11 @@ async function handleModels(res) {
 }
 
 async function handleChat(req, res, body) {
-  // Metered AI requires a signed-in account so Free weekly limits can be enforced.
+  // Metered AI requires a signed-in account so Free weekly token limits can be enforced.
   const authed = await getAuthUser(req);
   if (!authed) {
     return sendJSON(res, 401, {
-      error: 'Sign in to use AI. Create a free account to get weekly AI actions.',
+      error: 'Sign in to use AI. Create a free account to get weekly AI tokens.',
       code: 'not_signed_in',
     });
   }
@@ -263,7 +263,8 @@ async function handleChat(req, res, body) {
   if (!messages.length) return sendJSON(res, 400, { error: 'messages[] required' });
 
   let acct = ensureUsage(await store.getAccount(user.id) || blankAccount());
-  const gate = consumeUsage(acct, 1);
+  // Gate on remaining tokens before calling the model; bill actual usage after a reply.
+  const gate = canConsume(acct, 1);
   if (!gate.ok) {
     await store.setAccount(user.id, gate.account); // persist rolled period if any
     log('info', 'AI quota exceeded ' + (user.email || user.id) + ' plan=' + gate.account.plan);
@@ -279,18 +280,35 @@ async function handleChat(req, res, body) {
 
   metrics.chats++;
   const requested = payload.model;
-  const usage = usageView(acct);
+  const promptText = messages.map((m) => m.content).join('\n');
+
+  async function finish(reply) {
+    const tokUsage = reply.tokUsage || null;
+    const content = reply.content || '';
+    const billed = countMessageTokens(tokUsage, promptText, content);
+    const billedResult = billTokens(acct, billed);
+    acct = billedResult.account;
+    await store.setAccount(user.id, acct);
+    const usage = usageView(acct);
+    return sendJSON(res, 200, {
+      simulated: !!reply.simulated,
+      model: reply.model,
+      content,
+      note: reply.note,
+      usage,
+      tokensBilled: billedResult.billed,
+    });
+  }
 
   // A cloud model that an admin has enabled has no real backend here, so it is
   // answered by the simulator with a clear note. Otherwise use Ollama.
-  const promptText = messages.map((m) => m.content).join('\n');
   const isCloud = CLOUD_MODELS.some((c) => c.id === requested);
   if (config.simulateOnly || isCloud) {
     metrics.simulated++;
     const note = isCloud ? `${requested} is a hosted model — simulated in this prototype.` : undefined;
     const content = simulate(messages);
     recordTokens(requested || 'simulated', promptText, content);
-    return sendJSON(res, 200, { simulated: true, model: requested || 'simulated', content, note, usage });
+    return finish({ simulated: true, model: requested || 'simulated', content, note });
   }
 
   const local = await listOllamaModels();
@@ -307,11 +325,13 @@ async function handleChat(req, res, body) {
         const { model: hm, content, usage: tokUsage } = await callHostedAI(messages);
         metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1;
         recordUsage(hm, tokUsage, promptText, content);
-        return sendJSON(res, 200, { simulated: false, model: hm, content, usage });
+        return finish({ simulated: false, model: hm, content, tokUsage });
       } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
     }
     metrics.simulated++;
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), usage });
+    const content = simulate(messages);
+    recordTokens('simulated', promptText, content);
+    return finish({ simulated: true, model: 'simulated', content });
   }
 
   try {
@@ -322,18 +342,22 @@ async function handleChat(req, res, body) {
     const parsed = JSON.parse(rb);
     metrics.byModel[model] = (metrics.byModel[model] || 0) + 1;
     const content = parsed.message ? parsed.message.content : (parsed.response || '');
+    let tokUsage = null;
     // Prefer Ollama's real token counts when present, else estimate.
     if (parsed.prompt_eval_count || parsed.eval_count) {
       const p = parsed.prompt_eval_count || 0, c = parsed.eval_count || 0;
       metrics.tokens.total += p + c; metrics.tokens.prompt += p; metrics.tokens.completion += c;
       const mm = (metrics.tokens.byModel[model] ||= { prompt: 0, completion: 0, total: 0 });
       mm.prompt += p; mm.completion += c; mm.total += p + c;
+      tokUsage = { prompt_tokens: p, completion_tokens: c };
     } else { recordTokens(model, promptText, content); }
-    return sendJSON(res, 200, { simulated: false, model, content, usage });
+    return finish({ simulated: false, model, content, tokUsage });
   } catch (e) {
     metrics.aiErrors++; metrics.simulated++;
     log('warn', 'chat fallback: ' + e.message);
-    return sendJSON(res, 200, { simulated: true, model: 'simulated', content: simulate(messages), note: String(e.message || e), usage });
+    const content = simulate(messages);
+    recordTokens('simulated', promptText, content);
+    return finish({ simulated: true, model: 'simulated', content, note: String(e.message || e) });
   }
 }
 
@@ -756,7 +780,7 @@ async function handleAccount(req, res, sub, body) {
       plan,
       previousPlan: prev,
       amount,
-      currency: 'USD',
+      currency: 'PHP',
       status: amount > 0 ? 'demo' : 'free',
       source: 'in-app-upgrade',
       createdAt: Date.now(),
@@ -766,7 +790,7 @@ async function handleAccount(req, res, sub, body) {
       ok: true,
       account: normalized,
       payment,
-      usageLimit: PLAN_LIMITS[plan] || 1000,
+      usageLimit: PLAN_LIMITS[plan] || PLAN_LIMITS.Free,
       usage: usageView(normalized),
     });
   }

@@ -43,7 +43,7 @@ export function showQuotaSheet(data = {}) {
   const period = u.period === 'week' ? 'week' : 'month';
   openSheet(`<div class="tutorial-sheet">
     <h3>AI limit reached</h3>
-    <p class="tutorial-copy">${esc(data.error || `You've used all ${u.limit} Free AI actions this ${period}.`)}</p>
+    <p class="tutorial-copy">${esc(data.error || `You've used all ${Number(u.limit || 0).toLocaleString()} Free AI tokens this ${period}.`)}</p>
     <p class="tutorial-copy" style="margin-top:4px">Upgrade for more capacity, or wait <b>${days} day${days === 1 ? '' : 's'}</b> for your Free weekly reset.</p>
     <button type="button" class="btn" data-act="goto" data-s="plans">View subscriptions</button>
     <button type="button" class="btn ghost" data-close style="margin-top:8px">Not now</button>

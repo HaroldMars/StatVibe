@@ -470,8 +470,10 @@ test('AI chat requires auth and records usage for the signed-in plan', async () 
   assert.equal(ok.status, 200);
   assert.ok(ok.json.usage, 'usage returned');
   assert.ok(ok.json.usage.used >= 1);
-  assert.equal(ok.json.usage.limit, 10000); // alpha upgraded to Pro earlier
+  assert.equal(ok.json.usage.limit, 1000000); // alpha upgraded to Pro earlier
   assert.equal(ok.json.usage.period, 'month');
+  assert.equal(ok.json.usage.unit, 'tokens');
+  assert.ok(ok.json.tokensBilled >= 1);
   const s = await req('GET', '/api/admin/summary', { headers: { 'x-admin-token': 'test-token' } });
   assert.ok(s.json.metrics.tokens.total > 0, 'tokens counted');
 });
@@ -484,7 +486,7 @@ test('Free AI quota returns 402 at limit; weekly window resets after 7 days', as
   const uid = reg.json.user.id;
   const acct = await store.getAccount(uid);
   acct.plan = 'Free';
-  acct.aiUsed = 1000;
+  acct.aiUsed = 50000;
   acct.aiPeriodStart = Date.now();
   await store.setAccount(uid, acct);
 
@@ -493,16 +495,19 @@ test('Free AI quota returns 402 at limit; weekly window resets after 7 days', as
   assert.equal(blocked.json.code, 'quota_exceeded');
   assert.equal(blocked.json.upgradeRequired, true);
   assert.ok(blocked.json.usage);
+  assert.match(blocked.json.error || '', /tokens/i);
 
   const stale = await store.getAccount(uid);
-  stale.aiUsed = 1000;
+  stale.aiUsed = 50000;
   stale.aiPeriodStart = Date.now() - (8 * 24 * 3600 * 1000);
   await store.setAccount(uid, stale);
 
   const after = await req('POST', '/api/chat', { headers: auth(tok), body: { messages: [{ role: 'user', content: 'Hello again' }] } });
   assert.equal(after.status, 200);
-  assert.equal(after.json.usage.used, 1);
+  assert.ok(after.json.usage.used >= 1);
+  assert.ok(after.json.tokensBilled >= 1);
   assert.equal(after.json.usage.period, 'week');
+  assert.equal(after.json.usage.unit, 'tokens');
 });
 
 test('/auth/me slides session expiry so clients stay signed in', async () => {
