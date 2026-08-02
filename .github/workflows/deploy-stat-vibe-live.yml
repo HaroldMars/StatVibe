@@ -1,0 +1,35 @@
+# Deploys https://stat-vibe-two.vercel.app (Illuminary Peak / stat-vibe-live).
+# Required GitHub secret: VERCEL_TOKEN (account that owns team Illuminary Peak).
+# Optional: VERCEL_ORG_ID, VERCEL_PROJECT_ID (defaults set below).
+name: Deploy stat-vibe-two
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vercel CLI
+        run: npm i -g vercel@41
+      - name: Deploy to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "Missing GitHub secret VERCEL_TOKEN — add a Vercel token for illuminarypeak / Illuminary Peak, then re-run."
+            exit 1
+          fi
+          ORG_ID="${{ secrets.VERCEL_ORG_ID }}"
+          PROJECT_ID="${{ secrets.VERCEL_PROJECT_ID }}"
+          ORG_ID="${ORG_ID:-team_56sac0z1bDHP7CYWI68gf9b5}"
+          PROJECT_ID="${PROJECT_ID:-prj_DLnFQS5LMLGQbQEYRnR9Z8VdQYyl}"
+          mkdir -p .vercel
+          printf '%s\n' "{\"projectId\":\"$PROJECT_ID\",\"orgId\":\"$ORG_ID\",\"projectName\":\"stat-vibe-live\"}" > .vercel/project.json
+          export VERCEL_ORG_ID="$ORG_ID"
+          export VERCEL_PROJECT_ID="$PROJECT_ID"
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
