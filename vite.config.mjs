@@ -5,13 +5,21 @@ import fs from 'node:fs';
 import { defineConfig } from 'vite';
 
 const require = createRequire(import.meta.url);
-const { requestHandler } = require('./server.js');
 
+// IMPORTANT: do NOT require('./server.js') at config load time.
+// Vercel static-build runs `vite build` with production env (including MONGO_URI
+// on Illuminary Peak). Eagerly loading the server starts a Mongo connection and
+// hangs/fails the Hobby deploy. Only attach the API during vite dev/preview.
 function localApiPlugin() {
+  let requestHandler;
+  const loadHandler = () => {
+    if (!requestHandler) ({ requestHandler } = require('./server.js'));
+    return requestHandler;
+  };
   const attach = (middlewares) => {
     middlewares.use((req, res, next) => {
       if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
-      if (req.url && req.url.startsWith('/api/')) return requestHandler(req, res);
+      if (req.url && req.url.startsWith('/api/')) return loadHandler()(req, res);
       return next();
     });
   };
