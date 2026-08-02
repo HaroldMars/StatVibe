@@ -34,6 +34,18 @@ test('migrateAccountRevenue seeds from legacy statsDraft.revenue', () => {
   assert.equal(rev.totalRevenue(acct.revenueEntries), 5000);
 });
 
+test('cumulativeSeries live mode plots each entry', () => {
+  const t0 = Date.parse('2026-07-01T10:00:00Z');
+  const t1 = Date.parse('2026-07-01T11:00:00Z');
+  const series = rev.cumulativeSeries([
+    { id: 'a', amount: 100, createdAt: t0 },
+    { id: 'b', amount: 50, createdAt: t1 },
+  ], 'live');
+  assert.equal(series.length, 2);
+  assert.equal(series[0].cumulative, 100);
+  assert.equal(series[1].cumulative, 150);
+});
+
 test('sanitizeEntry rejects non-positive amounts', () => {
   assert.equal(rev.sanitizeEntry({ amount: 0 }), null);
   assert.equal(rev.sanitizeEntry({ amount: -5 }), null);

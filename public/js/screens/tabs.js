@@ -33,10 +33,10 @@ export function statsCard() {
     </div>`;
   }
   const totalStock = products || inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
-  const period = state.revenuePeriod || 'day';
+  const period = state.revenuePeriod || 'live';
   const series = cumulativeSeries(entries, period);
   const { line, area } = seriesToSvg(series);
-  const periodLabel = period === 'week' ? 'by week' : period === 'month' ? 'by month' : 'by day';
+  const periodLabel = period === 'week' ? 'by week' : period === 'month' ? 'by month' : period === 'day' ? 'by day' : 'each sale';
   const cs = calcSummary();
   const askQ = `Analyze my business. Stats: revenue ${money(revenue)} across ${entries.length} entries, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
   return `
@@ -49,8 +49,8 @@ export function statsCard() {
         <div class="big-num" style="font-size:34px">${money(revenue)}</div>
       </div>
       <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:8px">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${periodLabel}${products ? ` · ${totalStock.toLocaleString()} products` : ''}</div>
-      <div class="flex gap-8 mb-8">
-        ${['day', 'week', 'month'].map((p) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px;text-transform:capitalize">${p}</button>`).join('')}
+      <div class="flex gap-8 mb-8 flex-wrap">
+        ${[['live', 'Live'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([p, lab]) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px">${lab}</button>`).join('')}
       </div>
       ${series.length ? `
       <svg viewBox="0 0 300 100" width="100%" height="92" preserveAspectRatio="none" aria-label="Cumulative revenue chart">

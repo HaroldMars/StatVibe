@@ -4,7 +4,7 @@ export const state = {
   tab: 'stats',
   stack: [],            // sub-screen history: [{screen, params}]
   period: 'Month',
-  revenuePeriod: 'day', // day | week | month for cumulative chart
+  revenuePeriod: 'live', // live | day | week | month for cumulative chart
   calc: { tab: 'Retail', unitCost: 42.0, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
   supply: { onHand: 1240, reorder: 400, cover: 22 },
   setupDraft: { sellsProducts: true, goals: [] },

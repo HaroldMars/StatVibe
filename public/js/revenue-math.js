@@ -28,8 +28,19 @@ function bucketKey(ts, period) {
 }
 
 export function cumulativeSeries(entries, period = 'day') {
-  const p = period === 'week' || period === 'month' ? period : 'day';
   const sorted = revenueEntries(entries).slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  // Live / entry mode: one chart point per add so the line visibly grows with each sale.
+  if (period === 'live' || period === 'entry') {
+    let run = 0;
+    return sorted.map((e, i) => {
+      const amount = Number(e.amount) || 0;
+      run += amount;
+      const d = new Date(e.createdAt || Date.now());
+      const label = `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      return { key: e.id || String(i), label, periodTotal: amount, cumulative: run };
+    });
+  }
+  const p = period === 'week' || period === 'month' ? period : 'day';
   const buckets = new Map();
   for (const e of sorted) {
     const k = bucketKey(e.createdAt || Date.now(), p);

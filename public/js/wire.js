@@ -177,7 +177,7 @@ export function bindClicks(root) {
       case 'editRevenue': editRevenueSheet(t.dataset.id); break;
       case 'revenuePeriod': {
         const p = t.dataset.p;
-        if (p === 'day' || p === 'week' || p === 'month') {
+        if (p === 'live' || p === 'day' || p === 'week' || p === 'month') {
           state.revenuePeriod = p;
           render();
         }
