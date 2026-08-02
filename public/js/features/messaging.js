@@ -56,7 +56,7 @@ export async function agentDraft() {
     if (state.session.agentAutoReply) {
       const r = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text } });
       state.chat.drafting = false;
-      if (r.status === 201) { state.chat.messages.push(r.data.message); toast('AgentTech auto-replied ✓'); loadConversations(); }
+      if (r.status === 201) { state.chat.messages.push(r.data.message); toast('AgentTech auto-replied'); loadConversations(); }
       render(); scrollChat(); return;
     }
     state.chat.draft = text;
@@ -68,7 +68,7 @@ export async function approveSend() {
   if (!state.chat.draft || !state.chat.convId) return;
   const text = state.chat.draft; state.chat.draft = null;
   const { status, data } = await api('/conversations/' + state.chat.convId + '/messages', { method: 'POST', body: { text } });
-  if (status === 201) { state.chat.messages.push(data.message); render(); scrollChat(); toast('Sent ✓'); loadConversations(); }
+  if (status === 201) { state.chat.messages.push(data.message); render(); scrollChat(); toast('Sent'); loadConversations(); }
 }
 
 export function editDraft() {

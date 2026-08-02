@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { appbar } from '../chrome.js';
 import { esc, imgSrc } from '../utils.js';
+import { I, iconTile } from '../icons.js';
 
 export const screens = {};
 
@@ -30,10 +31,11 @@ screens.welcome = () => `
       <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:12px">Real-time analytics, smart planning, and client messaging built for teams of any size, in any industry.</div>
     </div>
     <div class="stack gap-14" style="margin-bottom:26px">
-      ${[['📊', 'Predictive dashboards', "See what's coming, not just what happened"],
-         ['✨', 'Multi-model AI workspace', 'Blend the best models for every task'],
-         ['💬', 'AgentTech assistant', 'AI handles client & partner messaging']]
-        .map(([e, t, s]) => `<div class="flex items-center gap-12"><div style="width:38px;height:38px;border-radius:11px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;font-size:18px">${e}</div><div><div style="font-size:13.5px;font-weight:600">${t}</div><div style="font-size:11.5px;color:var(--muted-2)">${s}</div></div></div>`).join('')}
+      ${[
+        [I.bars('var(--teal)', 18), 'Predictive dashboards', "See what's coming, not just what happened"],
+        [I.spark('var(--teal)', 18), 'Multi-model AI workspace', 'Blend the best models for every task'],
+        [I.chat('var(--teal)', 18), 'AgentTech assistant', 'AI handles client & partner messaging'],
+      ].map(([icon, t, s]) => `<div class="flex items-center gap-12">${iconTile(icon)}<div><div style="font-size:13.5px;font-weight:600">${t}</div><div style="font-size:11.5px;color:var(--muted-2)">${s}</div></div></div>`).join('')}
     </div>
     <div class="stack gap-10">
       <button class="btn" data-act="toRegister">Create account</button>
@@ -42,7 +44,6 @@ screens.welcome = () => `
     <div style="text-align:center;margin-top:14px">
       <button type="button" data-act="guest" style="background:none;border:none;box-shadow:none;padding:6px;color:var(--muted-2);font:500 12.5px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent">Continue without an account</button>
     </div>
-    <div style="text-align:center;margin-top:10px"><span data-act="download" style="font-size:12.5px;color:var(--teal);font-weight:600;cursor:pointer">📲 Download / install the app</span></div>
     <div style="text-align:center;font-size:10.5px;color:var(--muted-3);line-height:1.6;margin-top:20px">A new, upcoming project of<br><a href="https://illuminary-peak.vercel.app/" target="_blank" rel="noopener noreferrer" style="color:var(--muted);font-weight:600;text-decoration:none">Illuminary Peak Company</a> · 2026</div>
   </div>`;
 

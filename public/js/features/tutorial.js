@@ -3,27 +3,28 @@ import { api } from '../api.js';
 import { esc, toast } from '../utils.js';
 import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
+import { namedIcon } from '../icons.js';
 
 const TUTORIAL_STEPS = [
   {
     title: 'Stats dashboard',
     body: 'Track revenue, products sold, and average price. Ask AI for insights based on your live numbers.',
-    emoji: '📊',
+    icon: 'bars',
   },
   {
     title: 'Business calculator',
     body: 'Retail uses markup pricing. Product uses target gross margin. Supply tracks inventory and restock timing.',
-    emoji: '🧮',
+    icon: 'calc',
   },
   {
     title: 'Idea Hub & AI',
     body: 'Capture ideas, then use the AI workspace to draft plans, forecasts, and documents.',
-    emoji: '✨',
+    icon: 'spark',
   },
   {
     title: 'AgentTech messaging',
     body: 'Message clients with your StatVibe code. AI can draft a reply — you approve before sending.',
-    emoji: '💬',
+    icon: 'chat',
   },
 ];
 
@@ -46,7 +47,7 @@ function showTutorialSheet() {
   const step = state.tutorial.step;
   if (step < 0) {
     openSheet(`<div class="tutorial-sheet">
-      <div class="tutorial-emoji">👋</div>
+      <div class="tutorial-icon">${namedIcon('wave', 'var(--teal)', 36)}</div>
       <h3>Welcome to StatVibe</h3>
       <p class="tutorial-copy">Take a quick tour of Stats, Calculator, Idea Hub, AI, and AgentTech — or skip and explore on your own.</p>
       <button type="button" class="btn" data-act="tutorialStart">Start tutorial</button>
@@ -58,7 +59,7 @@ function showTutorialSheet() {
   const last = step >= TUTORIAL_STEPS.length - 1;
   openSheet(`<div class="tutorial-sheet">
     <div class="tutorial-progress">${TUTORIAL_STEPS.map((_, i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div>
-    <div class="tutorial-emoji">${s.emoji}</div>
+    <div class="tutorial-icon">${namedIcon(s.icon, 'var(--teal)', 36)}</div>
     <h3>${esc(s.title)}</h3>
     <p class="tutorial-copy">${esc(s.body)}</p>
     <div class="tutorial-nav">

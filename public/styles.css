@@ -190,7 +190,7 @@ body {
 .stage-copy li { display: flex; gap: 11px; font-size: 13.5px; color: var(--ink-2); line-height: 1.4; }
 .stage-copy li b { display: block; font-weight: 600; }
 .stage-copy li span { color: var(--muted-2); font-size: 12px; }
-.stage-copy .dot { width: 30px; height: 30px; border-radius: 9px; background: var(--teal-tint); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.stage-copy .dot { width: 30px; height: 30px; border-radius: 9px; background: var(--teal-tint); color: var(--teal); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .stage-copy .ai-status { margin-top: 26px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .stage-copy .ai-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-3); }
 .stage-copy .ai-status.online i { background: var(--teal); }
@@ -654,6 +654,17 @@ html.ios.standalone .pad-top { padding-top: calc(var(--safe-t) + 18px); }
 /* First-run tutorial */
 .tutorial-sheet { text-align: center; padding: 4px 4px 8px; }
 .tutorial-emoji { font-size: 40px; line-height: 1; margin: 4px 0 12px; }
+.tutorial-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--teal-tint);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px auto 12px;
+}
 .tutorial-copy {
   font-size: 13.5px;
   color: var(--muted);

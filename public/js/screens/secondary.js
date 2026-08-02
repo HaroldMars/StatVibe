@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { I } from '../icons.js';
+import { I, iconTile, namedIcon } from '../icons.js';
 import { appbar } from '../chrome.js';
 import {
   esc, money, moneyDelta, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
@@ -32,7 +32,7 @@ screens.revenue = () => {
     </div>
     ${!entries.length ? `
     <div class="card" style="text-align:center;padding:28px 20px">
-      <div style="font-size:36px;margin-bottom:10px">📈</div>
+      <div style="display:flex;justify-content:center;margin-bottom:12px">${iconTile(I.trend('var(--teal)', 24), { size: 56, radius: 16 })}</div>
       <div style="font-size:15px;font-weight:600;margin-bottom:6px">No ledger yet</div>
       <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add a sale or refund. The chart tracks net revenue up and down in real time — same idea as Stripe net volume.</div>
       <button class="btn" data-act="addRevenue">Add sale</button>
@@ -100,10 +100,10 @@ screens.aiOutput = () => {
 
 screens.alerts = () => {
   const A = state.alerts || (state.alerts = [
-    { grp: 'Today', icon: '✨', tint: 'var(--teal-tint)', title: 'Forecast beat plan', body: 'Q3 projected at $2.41M — 6.8% over plan.', time: '18m ago', unread: true },
-    { grp: 'Today', icon: '⚠️', tint: 'var(--red-tint)', title: 'Low stock — Summit Pack 40L', body: 'Below reorder point. 6 days of cover left.', time: '1h ago', unread: true },
-    { grp: 'Today', icon: '💬', tint: 'var(--slate-blue-tint)', title: 'Meridian Retail replied', body: '"Perfect, send the PO" — AgentTech ready.', time: '2h ago', unread: false, act: 'agent' },
-    { grp: 'Earlier', icon: '⏳', tint: 'var(--amber-tint)', title: 'Free plan weekly tokens', body: 'Free AI tokens reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
+    { grp: 'Today', icon: 'spark', tint: 'var(--teal-tint)', color: 'var(--teal)', title: 'Forecast beat plan', body: 'Q3 projected at $2.41M — 6.8% over plan.', time: '18m ago', unread: true },
+    { grp: 'Today', icon: 'warn', tint: 'var(--red-tint)', color: 'var(--red)', title: 'Low stock — Summit Pack 40L', body: 'Below reorder point. 6 days of cover left.', time: '1h ago', unread: true },
+    { grp: 'Today', icon: 'chat', tint: 'var(--slate-blue-tint)', color: 'var(--teal)', title: 'Meridian Retail replied', body: '"Perfect, send the PO" — AgentTech ready.', time: '2h ago', unread: false, act: 'agent' },
+    { grp: 'Earlier', icon: 'clock', tint: 'var(--amber-tint)', color: 'var(--amber)', title: 'Free plan weekly tokens', body: 'Free AI tokens reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
   ]);
   const groups = [...new Set(A.map((a) => a.grp))];
   return `
@@ -114,7 +114,7 @@ screens.alerts = () => {
       <div class="stack gap-10">
         ${A.filter((a) => a.grp === g).map((a) => `
           <div class="card ${a.act ? '' : ''}" data-act="${a.act ? 'openAlert' : ''}" data-s="${a.act || ''}" style="padding:13px 14px;display:flex;gap:12px;${a.act ? 'cursor:pointer' : ''}">
-            <div style="width:34px;height:34px;border-radius:10px;background:${a.tint};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">${a.icon}</div>
+            <div style="width:34px;height:34px;border-radius:10px;background:${a.tint};color:${a.color || 'var(--teal)'};flex-shrink:0;display:flex;align-items:center;justify-content:center">${namedIcon(a.icon, 'currentColor', 16)}</div>
             <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(a.title)}</div><div style="font-size:12px;color:var(--muted);line-height:1.4;margin-top:2px">${esc(a.body)}</div><div style="font-size:10.5px;color:var(--muted-3);margin-top:5px">${a.time}</div></div>
             ${a.unread ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;margin-top:4px"></span>' : ''}
           </div>`).join('')}

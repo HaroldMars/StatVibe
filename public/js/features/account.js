@@ -3,6 +3,7 @@ import { api, clearTokenStorage } from '../api.js';
 import { esc, toast } from '../utils.js';
 import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
+import { I } from '../icons.js';
 
 export let installPrompt = null;
 export function setInstallPrompt(e) { installPrompt = e; }
@@ -12,12 +13,12 @@ export function downloadSheet() {
   const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
   openSheet(`<h3>Get the StatVibe app</h3>
     <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Install StatVibe on your phone or computer — it runs full-screen, gets its own icon, and works offline.</div>
-    ${standalone ? '<div class="card" style="text-align:center;padding:20px;font-size:13px">✅ You\'re already using the installed app.</div>'
+    ${standalone ? `<div class="card" style="text-align:center;padding:20px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--teal)">${I.check('var(--teal)', 18)} You're already using the installed app.</div>`
       : `${canInstall ? '<button class="btn" data-a-install style="margin-bottom:12px">Install now</button>' : ''}
       <div class="list">
-        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:2px">📱 iPhone / iPad</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Open in <b>Safari</b> → tap the Share button → <b>Add to Home Screen</b>.</div></div>
-        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:2px">🤖 Android</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Open in <b>Chrome</b> → menu ⋮ → <b>Install app</b> (or Add to Home screen).</div></div>
-        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:2px">💻 Desktop</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Click the <b>install</b> icon in the browser's address bar.</div></div>
+        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:var(--ink)">${I.device('var(--teal)', 16)} iPhone / iPad</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Open in <b>Safari</b> → tap the Share button → <b>Add to Home Screen</b>.</div></div>
+        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:var(--ink)">${I.android('var(--teal)', 16)} Android</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Open in <b>Chrome</b> → menu → <b>Install app</b> (or Add to Home screen).</div></div>
+        <div class="row" style="cursor:default;display:block;padding:12px 15px"><div style="font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:var(--ink)">${I.desktop('var(--teal)', 16)} Desktop</div><div style="font-size:12px;color:var(--muted);line-height:1.5">Click the <b>install</b> icon in the browser's address bar.</div></div>
       </div>
       <div style="font-size:11px;color:var(--muted-3);margin-top:12px;line-height:1.5">A native Android APK / iOS build is on the way — for now the installable app above gives you the same full-screen experience on both platforms.</div>`}
     <button class="btn outline" data-close style="margin-top:12px">Close</button>`);
@@ -192,7 +193,7 @@ export function editBusinessSheet() {
 export function currencySheet() {
   const cur = (state.session.account && state.session.account.currency) || 'USD';
   openSheet(`<h3>Currency</h3><div class="list" style="margin-top:12px;max-height:60vh;overflow:auto">
-    ${(state.session.currencies || []).map((c) => `<button class="row" data-cur="${c.code}"><span>${esc(c.symbol)} · ${esc(c.name)}</span><span class="val">${c.code}${c.code === cur ? ' ✓' : ''}</span></button>`).join('')}
+    ${(state.session.currencies || []).map((c) => `<button class="row" data-cur="${c.code}"><span>${esc(c.symbol)} · ${esc(c.name)}</span><span class="val" style="color:var(--teal)">${c.code}${c.code === cur ? ' ' + I.check('var(--teal)', 14) : ''}</span></button>`).join('')}
   </div>`);
   setTimeout(() => { document.getElementById('sheet').querySelectorAll('[data-cur]').forEach((b) => b.onclick = async () => {
     const { status, data } = await api('/account', { method: 'PATCH', body: { currency: b.dataset.cur } });
@@ -218,6 +219,6 @@ export async function doUpgrade(name) {
         remaining: data.usage.remaining,
       };
     } else if (data.usageLimit) state.usage.limit = data.usageLimit;
-    render(); toast(`Upgraded to ${name} ✓`);
+    render(); toast(`Upgraded to ${name}`);
   } else toast(data.error || 'Upgrade failed');
 }

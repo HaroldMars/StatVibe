@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { I } from '../icons.js';
+import { I, iconTile } from '../icons.js';
 import { tabbar } from '../chrome.js';
 import {
   esc, money, currency, calcSummary, hasStatInputs, statNum, bizName, userName,
@@ -22,7 +22,7 @@ export function statsCard() {
   if (!hasManual) {
     return `
     <div class="card mb-12" style="text-align:center;padding:28px 20px">
-      <div style="font-size:36px;margin-bottom:10px">📊</div>
+      <div style="display:flex;justify-content:center;margin-bottom:12px">${iconTile(I.bars('var(--teal)', 22), { size: 56, radius: 16 })}</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:6px">No revenue yet</div>
       <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Log sales and refunds. The net volume line rises and falls in real time — like Stripe or Shopify.</div>
       <button class="btn" data-act="addRevenue">Add sale</button>
@@ -209,7 +209,7 @@ export function inventoryView() {
   const items = state.session.inventory || [];
   if (!items.length) {
     return `<div class="card" style="text-align:center;padding:26px 18px">
-      <div style="font-size:34px;margin-bottom:8px">📦</div>
+      <div style="display:flex;justify-content:center;margin-bottom:12px">${iconTile(I.box('var(--teal)', 22), { size: 56, radius: 16 })}</div>
       <div style="font-size:15px;font-weight:600;margin-bottom:4px">No inventory yet</div>
       <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add your products — stock, price, quantity, size and weight — and StatVibe's AI predicts how long each will last.</div>
       <button class="btn" data-act="addItem">+ Add first product</button>
@@ -258,7 +258,7 @@ tabScreens.hub = () => {
     <div class="card mb-12" data-act="editIdea" data-id="${it.id}" style="cursor:pointer">
       <div class="row-between" style="align-items:flex-start;margin-bottom:8px"><div style="font-size:14px;font-weight:600">${esc(it.title)}</div><span class="tagchip ${IDEA_TAG[it.status] || 'grey'}">${esc(it.status)}</span></div>
       ${it.notes ? `<div style="font-size:12px;color:var(--muted);line-height:1.45">${esc(it.notes)}</div>` : '<div style="font-size:12px;color:var(--muted-3)">No notes yet — tap to edit</div>'}
-    </div>`).join('') : `<div class="card" style="text-align:center;padding:24px 18px"><div style="font-size:32px;margin-bottom:8px">💡</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">No ideas yet</div><div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Capture ideas and notes; edit them anytime, and let AIVibe sharpen them into prompts.</div><button class="btn" data-act="newIdea">+ Add your first idea</button></div>`}
+    </div>`).join('') : `<div class="card" style="text-align:center;padding:24px 18px"><div style="display:flex;justify-content:center;margin-bottom:12px">${iconTile(I.bulb('var(--teal)', 22), { size: 56, radius: 16 })}</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">No ideas yet</div><div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Capture ideas and notes; edit them anytime, and let AIVibe sharpen them into prompts.</div><button class="btn" data-act="newIdea">+ Add your first idea</button></div>`}
   </div>
   ${tabbar('hub')}`;
 };
@@ -281,7 +281,7 @@ tabScreens.ai = () => {
   <div class="scroll pad">
     <div class="row-between mb-14">
       <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine · start Ollama'} · blend for smarter output</div></div>
-      <button class="pill" data-act="aiHistory" style="height:34px">🕘 History${state.session.history && state.session.history.length ? ' · ' + state.session.history.length : ''}</button>
+      <button class="pill" data-act="aiHistory" style="height:34px">${I.history('currentColor', 13)} History${state.session.history && state.session.history.length ? ' · ' + state.session.history.length : ''}</button>
     </div>
 
     <div class="eyebrow mb-8">Active models</div>
@@ -316,7 +316,7 @@ tabScreens.ai = () => {
 tabScreens.agent = () => {
   const convs = state.session.conversations || [];
   const row = (c) => {
-    const preview = (c.mine ? 'You: ' : '') + (c.lastText || 'Say hello 👋');
+    const preview = (c.mine ? 'You: ' : '') + (c.lastText || 'Say hello');
     const unread = c.unread > 0;
     return `
     <button class="conv-row" data-act="openChat" data-id="${c.id}">
@@ -336,7 +336,7 @@ tabScreens.agent = () => {
     ${convs.length
       ? `<div class="stack" style="gap:2px">${convs.map(row).join('')}</div>`
       : `<div class="card" style="text-align:center;padding:30px 20px;margin-top:20px">
-          <div style="width:64px;height:64px;border-radius:20px;background:var(--teal-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:30px">💬</div>
+          <div style="display:flex;justify-content:center;margin:0 auto 14px">${iconTile(I.chat('var(--teal)', 26), { size: 64, radius: 20 })}</div>
           <div style="font-size:16px;font-weight:700;margin-bottom:6px">No messages yet</div>
           <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:18px">Messages appear when someone scans your StatVibe QR. Share your code, or start one by scanning theirs.</div>
           <button class="btn" data-act="newChat" style="margin-bottom:10px">Start a message</button>

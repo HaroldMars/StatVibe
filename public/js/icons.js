@@ -1,3 +1,4 @@
+/** StatVibe UI icons — SVG graphics only (no emoji). User-typed emoji in messages stays as-is. */
 export const I = {
   back: `<svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M10 2L2 10l8 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   bars: (c = 'currentColor', w = 21) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M5 21V11M12 21V5M19 21v-7" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
@@ -17,4 +18,43 @@ export const I = {
   ellipsis: `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg>`,
   copy: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.7"/></svg>`,
   phone: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 5a16 16 0 0 0 15 15v-3.5l-4-1.5-2 2a12 12 0 0 1-5-5l2-2-1.5-4H4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
+
+  // Extra UI graphics (replaced former emoji placeholders)
+  trend: (c = 'currentColor', w = 22) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 7-8" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 7h6v6" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  box: (c = 'currentColor', w = 22) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5v-7Z" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/><path d="M3 8.5 12 14l9-5.5M12 14v7" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
+  warn: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M12 3.5 21 20H3L12 3.5Z" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.5h.01" stroke="${c}" stroke-width="1.9" stroke-linecap="round"/></svg>`,
+  clock: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.25" stroke="${c}" stroke-width="1.7"/><path d="M12 8v4.5l3 1.8" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  wave: (c = 'currentColor', w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M4 12c1.5-2.5 3-3.5 4.5-3.5S11 10 12 12s2 3.5 3.5 3.5S18.5 14.5 20 12" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17c1.5-2.5 3-3.5 4.5-3.5S11 15 12 17s2 3.5 3.5 3.5S18.5 19.5 20 17" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg>`,
+  device: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.2" stroke="${c}" stroke-width="1.7"/><path d="M11 18.5h2" stroke="${c}" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+  android: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M8 9.5h8v7.2a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V9.5Z" stroke="${c}" stroke-width="1.6"/><path d="M9 7.2 7.2 4.8M15 7.2l1.8-2.4M8 12.5H5.8M18.2 12.5H16M9.2 18.7v2M14.8 18.7v2" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="12.2" r="0.8" fill="${c}"/><circle cx="14" cy="12.2" r="0.8" fill="${c}"/></svg>`,
+  desktop: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="${c}" stroke-width="1.7"/><path d="M8 20h8M12 16v4" stroke="${c}" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+  check: (c = 'currentColor', w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  history: (c = 'currentColor', w = 14) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" stroke="${c}" stroke-width="1.7" stroke-linecap="round"/><path d="M4.5 5v4.2H8.7M12 8v4.2l2.8 1.7" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
+
+/** Tinted square tile used for empty states / feature rows. */
+export function iconTile(svgHtml, { size = 38, radius = 11, bg = 'var(--teal-tint)', color = 'var(--teal)' } = {}) {
+  return `<div class="icon-tile" style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;flex-shrink:0">${svgHtml}</div>`;
+}
+
+/** Resolve a named icon for alerts / tutorial (returns SVG string). */
+export function namedIcon(name, c = 'currentColor', w = 18) {
+  const map = {
+    bars: () => I.bars(c, w),
+    calc: () => I.calc(c, w),
+    spark: () => I.spark(c, w),
+    chat: () => I.chat(c, w),
+    bulb: () => I.bulb(c, w),
+    trend: () => I.trend(c, w),
+    box: () => I.box(c, w),
+    warn: () => I.warn(c, w),
+    clock: () => I.clock(c, w),
+    wave: () => I.wave(c, w),
+    history: () => I.history(c, w),
+    check: () => I.check(c, w),
+    device: () => I.device(c, w),
+    android: () => I.android(c, w),
+    desktop: () => I.desktop(c, w),
+  };
+  return (map[name] || map.spark)();
+}

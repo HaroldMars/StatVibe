@@ -3,6 +3,7 @@ import { STORAGE } from './api.js';
 import { toast } from './utils.js';
 import { openSheet, closeSheet } from './sheet.js';
 import { render } from './router.js';
+import { I } from './icons.js';
 
 export const prefersDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 export function effectiveTheme() {
@@ -26,7 +27,7 @@ export function setAppearance(a) {
 }
 export function themePicker() {
   const cur = state.settings.appearance;
-  const opt = (val, label, desc) => `<button class="row" data-theme-pick="${val}"><div><div style="font-size:14px">${label}</div><div style="font-size:11.5px;color:var(--muted-2)">${desc}</div></div><span class="val">${cur === val ? '✓' : ''}</span></button>`;
+  const opt = (val, label, desc) => `<button class="row" data-theme-pick="${val}"><div><div style="font-size:14px">${label}</div><div style="font-size:11.5px;color:var(--muted-2)">${desc}</div></div><span class="val" style="color:var(--teal)">${cur === val ? I.check('var(--teal)', 16) : ''}</span></button>`;
   openSheet(`<h3>Appearance</h3><div class="list" style="margin-top:12px">
     ${opt('Light', 'Light', 'Always light')}
     ${opt('Dark', 'Dark', 'Always dark')}

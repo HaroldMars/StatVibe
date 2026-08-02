@@ -114,7 +114,7 @@ export function bindClicks(root) {
         <button class="row" data-pick="New workspace…"><span style="color:var(--teal);font-weight:600">+ New workspace</span></button>
       </div>`); break;
 
-      case 'applyPlan': toast('Forecast applied to your plan ✓'); break;
+      case 'applyPlan': toast('Forecast applied to your plan'); break;
       case 'askAI': state.aiPrefill = t.dataset.q || ''; go('ai'); break;
       case 'saveStatsInputs': {
         state.statsDraft.revenue = ((document.getElementById('statsRevenue') || {}).value || '').trim();
@@ -201,7 +201,7 @@ export function bindClicks(root) {
       // settings
       case 'toggleSettingBlend': state.settings.blend = !state.settings.blend; state.models.blend = state.settings.blend; render(); break;
       case 'toggleNotifications': state.settings.notifications = !state.settings.notifications; render(); toast(`Notifications ${state.settings.notifications ? 'on' : 'off'}`); break;
-      case 'saveProfile': back(); toast('Profile saved ✓'); break;
+      case 'saveProfile': back(); toast('Profile saved'); break;
       case 'changePwd': changePasswordSheet(); break;
       case 'twoFactor': toast('Two-factor setup coming soon'); break;
       case 'pickAppearance': themePicker(); break;
