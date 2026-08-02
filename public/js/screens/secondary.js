@@ -13,17 +13,17 @@ screens.revenue = () => {
     .slice()
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const total = totalRevenue(entries);
-  const period = state.revenuePeriod || 'day';
+  const period = state.revenuePeriod || 'live';
   const series = cumulativeSeries(entries, period);
   const { line, area } = seriesToSvg(series);
-  const periodLabel = period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Day';
+  const periodLabel = period === 'week' ? 'Week' : period === 'month' ? 'Month' : period === 'day' ? 'Day' : 'Live';
   return `
   ${appbar('Revenue', { right: `<button class="iconbtn" data-act="addRevenue" title="Add revenue">+</button>` })}
   <div class="scroll" style="padding:8px 18px 20px">
     <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">${money(total)}</div></div>
     <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:10px">Sum of ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · updates live when you add</div>
-    <div class="flex gap-8 mb-12">
-      ${['day', 'week', 'month'].map((p) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px;text-transform:capitalize">${p}</button>`).join('')}
+    <div class="flex gap-8 mb-12 flex-wrap">
+      ${[['live', 'Live'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([p, lab]) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px">${lab}</button>`).join('')}
     </div>
     ${!entries.length ? `
     <div class="card" style="text-align:center;padding:28px 20px">
