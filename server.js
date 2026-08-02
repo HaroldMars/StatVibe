@@ -9,7 +9,9 @@ const path = require('path');
 const store = require('./lib/store');
 const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
+const revenueLib = require('./lib/revenue');
 const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
+const { sanitizeEntry, sanitizeEntries, migrateAccountRevenue, totalRevenue } = revenueLib;
 
 // Load .env (if present) into process.env before reading any config. Minimal,
 // dependency-free parser: `KEY=value`, `#` comments, optional quotes. Existing
@@ -540,6 +542,7 @@ function blankAccount() {
     tutorialDone: false, tutorialCompletedAt: null,
     aiUsed: 0, aiPeriodStart: Date.now(),
     statsDraft: { revenue: '', products: '', avgPrice: '' },
+    revenueEntries: [],
     calc: { tab: 'Retail', unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
     supply: { onHand: 0, reorder: 0, cover: 0 },
   };
@@ -585,10 +588,19 @@ async function bootstrapUser(base) {
 
 async function sessionPayload(res, status, token, user, expiresAt) {
   let account = await store.getAccount(user.id) || blankAccount();
+  const beforeEntries = JSON.stringify(account.revenueEntries || []);
+  account = migrateAccountRevenue(account);
+  // Keep statsDraft.revenue as a derived display total for older clients / AI context.
+  const total = totalRevenue(account.revenueEntries);
+  account.statsDraft = {
+    ...(account.statsDraft || { revenue: '', products: '', avgPrice: '' }),
+    revenue: total > 0 ? String(total) : (account.statsDraft && account.statsDraft.revenue) || '',
+  };
   const prevUsed = account.aiUsed;
   const prevStart = account.aiPeriodStart;
   account = ensureUsage(account);
-  if (account.aiUsed !== prevUsed || account.aiPeriodStart !== prevStart || account.aiLimit == null) {
+  const entriesChanged = JSON.stringify(account.revenueEntries || []) !== beforeEntries;
+  if (entriesChanged || account.aiUsed !== prevUsed || account.aiPeriodStart !== prevStart || account.aiLimit == null) {
     await store.setAccount(user.id, account);
   }
   const inventory = await store.listInventory(user.id);
@@ -903,6 +915,64 @@ function handleMeta(res) {
   });
 }
 
+// --- Revenue log (append-only entries; total = sum; chart = cumulative) ----
+async function handleRevenue(req, res, sub, body) {
+  const authed = await getAuthUser(req);
+  if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  const { user } = authed;
+  let acct = migrateAccountRevenue(await store.getAccount(user.id) || blankAccount());
+
+  if (sub === '' && req.method === 'GET') {
+    return sendJSON(res, 200, {
+      entries: acct.revenueEntries,
+      total: totalRevenue(acct.revenueEntries),
+      account: acct,
+    });
+  }
+
+  if (sub === '' && req.method === 'POST') {
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const entry = sanitizeEntry({ ...b, id: undefined, createdAt: b.createdAt || Date.now() });
+    if (!entry) return sendJSON(res, 400, { error: 'Enter a positive amount', code: 'invalid_amount' });
+    acct.revenueEntries = sanitizeEntries([...(acct.revenueEntries || []), entry]);
+    const total = totalRevenue(acct.revenueEntries);
+    acct.statsDraft = { ...(acct.statsDraft || {}), revenue: String(total) };
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 201, { entry, entries: acct.revenueEntries, total, account: acct });
+  }
+
+  const id = sub;
+  if (id && req.method === 'PATCH') {
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const list = acct.revenueEntries || [];
+    const idx = list.findIndex((e) => e.id === id);
+    if (idx < 0) return sendJSON(res, 404, { error: 'Entry not found' });
+    const merged = { ...list[idx], ...b, id: list[idx].id };
+    if (b.amount !== undefined) merged.amount = b.amount;
+    if (b.createdAt !== undefined) merged.createdAt = b.createdAt;
+    const next = sanitizeEntry(merged, { requireId: true });
+    if (!next) return sendJSON(res, 400, { error: 'Enter a positive amount', code: 'invalid_amount' });
+    list[idx] = next;
+    acct.revenueEntries = sanitizeEntries(list);
+    const total = totalRevenue(acct.revenueEntries);
+    acct.statsDraft = { ...(acct.statsDraft || {}), revenue: String(total) };
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 200, { entry: next, entries: acct.revenueEntries, total, account: acct });
+  }
+
+  if (id && req.method === 'DELETE') {
+    const list = (acct.revenueEntries || []).filter((e) => e.id !== id);
+    if (list.length === (acct.revenueEntries || []).length) return sendJSON(res, 404, { error: 'Entry not found' });
+    acct.revenueEntries = list;
+    const total = totalRevenue(list);
+    acct.statsDraft = { ...(acct.statsDraft || {}), revenue: total > 0 ? String(total) : '' };
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 200, { ok: true, entries: list, total, account: acct });
+  }
+
+  return sendJSON(res, 404, { error: 'Unknown revenue endpoint' });
+}
+
 // --- Idea Hub -------------------------------------------------------------
 async function handleIdeas(req, res, sub, body) {
   const authed = await getAuthUser(req);
@@ -1117,6 +1187,7 @@ async function requestHandler(req, res) {
       return handleAccount(req, res, sub, ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     }
     if (p === '/api/inventory' || p.startsWith('/api/inventory/')) return handleInventory(req, res, p === '/api/inventory' ? '' : p.slice('/api/inventory/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
+    if (p === '/api/revenue' || p.startsWith('/api/revenue/')) return handleRevenue(req, res, p === '/api/revenue' ? '' : p.slice('/api/revenue/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/predict' && req.method === 'POST') return handlePredict(req, res, await readBody(req));
     if (p === '/api/ideas' || p.startsWith('/api/ideas/')) return handleIdeas(req, res, p === '/api/ideas' ? '' : p.slice('/api/ideas/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p.startsWith('/api/ai/')) return handleAIHistory(req, res, p.slice('/api/ai/'.length), ['POST'].includes(req.method) ? await readBody(req) : null);

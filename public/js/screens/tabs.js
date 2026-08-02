@@ -6,6 +6,7 @@ import {
   initials, convAvatar, relTime,
 } from '../utils.js';
 import { computeRetail, computeProduct } from '../calc-math.js';
+import { totalRevenue, cumulativeSeries, seriesToSvg } from '../revenue-math.js';
 
 export const tabScreens = {};
 export const screens = {};
@@ -13,7 +14,8 @@ export const screens = {};
 export function statsCard() {
   const inv = state.session.inventory || [];
   const s = state.statsDraft || {};
-  const revenue = statNum(s.revenue);
+  const entries = (state.session.account && state.session.account.revenueEntries) || [];
+  const revenue = entries.length ? totalRevenue(entries) : statNum(s.revenue);
   const products = statNum(s.products);
   const avgPrice = statNum(s.avgPrice);
   const hasManual = hasStatInputs();
@@ -21,50 +23,44 @@ export function statsCard() {
     return `
     <div class="card mb-12" style="text-align:center;padding:28px 20px">
       <div style="font-size:36px;margin-bottom:10px">📊</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:6px">No business data yet</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Enter your key stats first (revenue, products sold, and average price). StatVibe will compute and chart your dashboard after all inputs are complete.</div>
-      <div class="field" style="text-align:left;margin-bottom:8px"><label>Revenue (MTD)</label><input id="statsRevenue" inputmode="decimal" placeholder="e.g. 1840000" value="${esc(s.revenue || '')}" /></div>
-      <div class="field" style="text-align:left;margin-bottom:8px"><label>Products sold (MTD)</label><input id="statsProducts" inputmode="decimal" placeholder="e.g. 4207" value="${esc(s.products || '')}" /></div>
-      <div class="field" style="text-align:left;margin-bottom:16px"><label>Average price</label><input id="statsAvgPrice" inputmode="decimal" placeholder="e.g. 117.38" value="${esc(s.avgPrice || '')}" /></div>
-      <button class="btn" data-act="saveStatsInputs">Compute stats</button>
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">No revenue yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Log each sale as its own entry. Your total and line chart grow in real time as you add amounts.</div>
+      <button class="btn" data-act="addRevenue">Add revenue</button>
     </div>
     <div class="grid-3 mb-12">
-      ${[['Revenue', money(0), '—', 'up'], ['Products', '0', '—', 'up'], ['Avg price', money(0), '—', 'up']]
+      ${[['Revenue', money(0), '—', 'up'], ['Products', products ? products.toLocaleString() : '0', '—', 'up'], ['Avg price', avgPrice ? money(avgPrice) : money(0), '—', 'up']]
         .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div><div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--muted-3)">${d}</div></div>`).join('')}
     </div>`;
   }
   const totalStock = products || inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
-  const totalValue = revenue;
-  const p1 = Math.round(revenue * 0.16);
-  const p2 = Math.round(revenue * 0.14);
-  const p3 = Math.round(revenue * 0.17);
-  const p4 = Math.round(revenue * 0.15);
-  const p5 = Math.round(revenue * 0.19);
-  const p6 = Math.round(revenue * 0.19);
-  const mx = Math.max(p1, p2, p3, p4, p5, p6) || 1;
-  const points = [p1, p2, p3, p4, p5, p6].map((v, i) => `${i * 60},${92 - ((v / mx) * 72)}`);
-  const first = points[0].split(',');
-  const last = points[points.length - 1].split(',');
-  const area = `M${first[0]},92 L${points.join(' L')} L${last[0]},92 Z`;
+  const period = state.revenuePeriod || 'day';
+  const series = cumulativeSeries(entries, period);
+  const { line, area } = seriesToSvg(series);
+  const periodLabel = period === 'week' ? 'by week' : period === 'month' ? 'by month' : 'by day';
   const cs = calcSummary();
-  const askQ = `Analyze my business. Stats: revenue ${money(revenue)}, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
+  const askQ = `Analyze my business. Stats: revenue ${money(revenue)} across ${entries.length} entries, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
   return `
-    <div class="card mb-12" style="padding:16px 16px 14px;cursor:pointer" data-act="goto" data-s="revenue">
+    <div class="card mb-12" style="padding:16px 16px 14px">
       <div class="row-between mb-8">
-        <div class="eyebrow">Revenue · MTD</div>
+        <div class="eyebrow" data-act="goto" data-s="revenue" style="cursor:pointer">Revenue · live cumulative</div>
+        <button class="pill" data-act="addRevenue" style="font-size:11px">+ Add</button>
       </div>
       <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px">
-        <div class="big-num" style="font-size:34px">${money(totalValue)}</div>
+        <div class="big-num" style="font-size:34px">${money(revenue)}</div>
       </div>
-      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:6px">${totalStock.toLocaleString()} products sold · Avg ${money(avgPrice)}</div>
-      <svg viewBox="0 0 300 100" width="100%" height="92" preserveAspectRatio="none">
-        <defs><linearGradient id="svStatsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5865f2" stop-opacity=".22"/><stop offset="1" stop-color="#5865f2" stop-opacity="0"/></linearGradient></defs>
+      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:8px">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${periodLabel}${products ? ` · ${totalStock.toLocaleString()} products` : ''}</div>
+      <div class="flex gap-8 mb-8">
+        ${['day', 'week', 'month'].map((p) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px;text-transform:capitalize">${p}</button>`).join('')}
+      </div>
+      ${series.length ? `
+      <svg viewBox="0 0 300 100" width="100%" height="92" preserveAspectRatio="none" aria-label="Cumulative revenue chart">
+        <defs><linearGradient id="svStatsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F766E" stop-opacity=".28"/><stop offset="1" stop-color="#0F766E" stop-opacity="0"/></linearGradient></defs>
         <path d="${area}" fill="url(#svStatsFill)"/>
-        <path d="M${points.join(' L')}" fill="none" stroke="#5865f2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+        <path d="${line}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>` : `<div style="font-size:12px;color:var(--muted);padding:18px 0;text-align:center">Add another entry to see growth over time</div>`}
     </div>
     <div class="grid-3 mb-12">
-      ${[['Revenue', money(revenue), '', 'up'], ['Products', totalStock.toLocaleString(), '', 'up'], ['Avg price', money(avgPrice), '', 'up']]
+      ${[['Revenue', money(revenue), '', 'up'], ['Products', totalStock ? totalStock.toLocaleString() : '—', '', 'up'], ['Avg price', avgPrice ? money(avgPrice) : '—', '', 'up']]
         .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div>${d ? `<div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--teal)">${d}</div>` : ''}</div>`).join('')}
     </div>
     <div class="card mb-12" style="padding:14px 15px">
@@ -95,9 +91,9 @@ export function statsCard() {
         ${I.spark('#7FE3C8', 15, true)}
         <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Stats insight</span>
       </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Based on your inputs, you are tracking <b style="color:#fff">${money(revenue)}</b> from <b style="color:#fff">${totalStock.toLocaleString()}</b> sold products, with an average ticket of <b style="color:#fff">${money(avgPrice)}</b>. Retail markup prices at <b style="color:#fff">${money(cs.retail.price)}</b>; product margin pricing at <b style="color:#fff">${money(cs.product.price)}</b>; supply of <b style="color:#fff">${cs.onHand.toLocaleString()}</b>.</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">You're tracking <b style="color:#fff">${money(revenue)}</b> across <b style="color:#fff">${entries.length}</b> revenue entr${entries.length === 1 ? 'y' : 'ies'}${products ? ` · ${totalStock.toLocaleString()} products` : ''}${avgPrice ? ` · avg ${money(avgPrice)}` : ''}.</div>
       <div class="insight-actions">
-        <button class="btn sm mint" data-act="editStatsInputs">Edit stats</button>
+        <button class="btn sm mint" data-act="addRevenue">Add revenue</button>
         <button class="btn sm" data-act="askAI" data-q="${esc(askQ)}" style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
       </div>
     </div>`;

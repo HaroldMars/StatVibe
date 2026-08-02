@@ -573,3 +573,40 @@ test('unknown code → 404; conversation endpoints require auth', async () => {
   assert.equal((await req('POST', '/api/conversations', { headers: auth(A.json.token), body: { tag: 'SV-NOPEXX' } })).status, 404);
   assert.equal((await req('GET', '/api/conversations')).status, 401);
 });
+
+test('revenue: append entries, total grows, edit and delete one entry', async () => {
+  const reg = await req('POST', '/api/auth/register', { body: { email: 'rev@test.co', password: 'password1', name: 'Rev User', acceptedTerms: true } });
+  assert.equal(reg.status, 201);
+  const tok = reg.json.token;
+
+  const a = await req('POST', '/api/revenue', { headers: auth(tok), body: { amount: 100, note: 'Day 1' } });
+  assert.equal(a.status, 201);
+  assert.equal(a.json.total, 100);
+  assert.equal(a.json.entries.length, 1);
+
+  const b = await req('POST', '/api/revenue', { headers: auth(tok), body: { amount: 50, category: 'Retail' } });
+  assert.equal(b.status, 201);
+  assert.equal(b.json.total, 150);
+  assert.equal(b.json.entries.length, 2);
+
+  const list = await req('GET', '/api/revenue', { headers: auth(tok) });
+  assert.equal(list.status, 200);
+  assert.equal(list.json.total, 150);
+
+  const id = b.json.entry.id;
+  const patched = await req('PATCH', '/api/revenue/' + id, { headers: auth(tok), body: { amount: 75 } });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.json.total, 175);
+
+  const del = await req('DELETE', '/api/revenue/' + id, { headers: auth(tok) });
+  assert.equal(del.status, 200);
+  assert.equal(del.json.total, 100);
+  assert.equal(del.json.entries.length, 1);
+});
+
+test('revenue rejects zero/negative amount', async () => {
+  const reg = await req('POST', '/api/auth/register', { body: { email: 'revbad@test.co', password: 'password1', name: 'Rev Bad', acceptedTerms: true } });
+  const bad = await req('POST', '/api/revenue', { headers: auth(reg.json.token), body: { amount: 0 } });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.json.code, 'invalid_amount');
+});
