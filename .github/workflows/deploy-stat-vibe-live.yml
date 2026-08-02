@@ -1,10 +1,11 @@
 # Deploys https://stat-vibe-two.vercel.app (Illuminary Peak / stat-vibe-live).
-# Required GitHub secret: VERCEL_TOKEN (account that owns team Illuminary Peak).
+# Manual only — auto-deploy on push was failing without VERCEL_TOKEN and is not
+# the target for https://stat-vibe.vercel.app (Jay Harold / stat-vibe).
+#
+# Required GitHub secret: VERCEL_TOKEN (account that owns Illuminary Peak).
 # Optional: VERCEL_ORG_ID, VERCEL_PROJECT_ID (defaults set below).
 name: Deploy stat-vibe-two
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 jobs:
   deploy:
@@ -19,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo "Missing GitHub secret VERCEL_TOKEN — add a Vercel token for illuminarypeak / Illuminary Peak, then re-run."
+            echo "Missing GitHub secret VERCEL_TOKEN — add a Vercel token for Illuminary Peak, then re-run."
             exit 1
           fi
           ORG_ID="${{ secrets.VERCEL_ORG_ID }}"

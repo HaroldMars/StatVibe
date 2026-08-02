@@ -1,0 +1,60 @@
+# Promotes the latest successful deployment to https://stat-vibe.vercel.app
+# (Jay Harold / jay-harolds-projects / stat-vibe).
+#
+# Use this when Instant Rollback (or a canceled deploy) has pinned production
+# and new Git pushes no longer receive the production domain automatically.
+#
+# Required GitHub secrets (from Vercel → Project Settings → General):
+#   VERCEL_TOKEN
+#   STAT_VIBE_ORG_ID       (team id for jay-harolds-projects)
+#   STAT_VIBE_PROJECT_ID   (project id for stat-vibe)
+name: Promote stat-vibe production
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: 'Optional deployment URL or id to promote (default: latest ready production build)'
+        required: false
+        type: string
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vercel CLI
+        run: npm i -g vercel@41
+      - name: Promote to production alias
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          STAT_VIBE_ORG_ID: ${{ secrets.STAT_VIBE_ORG_ID }}
+          STAT_VIBE_PROJECT_ID: ${{ secrets.STAT_VIBE_PROJECT_ID }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "Missing secret VERCEL_TOKEN"
+            exit 1
+          fi
+          if [ -z "${STAT_VIBE_ORG_ID:-}" ] || [ -z "${STAT_VIBE_PROJECT_ID:-}" ]; then
+            echo "Missing STAT_VIBE_ORG_ID / STAT_VIBE_PROJECT_ID for jay-harolds-projects/stat-vibe"
+            echo "Find them in Vercel → Project Settings → General (Project ID + Team ID)."
+            exit 1
+          fi
+          mkdir -p .vercel
+          printf '%s\n' "{\"projectId\":\"$STAT_VIBE_PROJECT_ID\",\"orgId\":\"$STAT_VIBE_ORG_ID\",\"projectName\":\"stat-vibe\"}" > .vercel/project.json
+          export VERCEL_ORG_ID="$STAT_VIBE_ORG_ID"
+          export VERCEL_PROJECT_ID="$STAT_VIBE_PROJECT_ID"
+          if [ -n "${DEPLOYMENT:-}" ]; then
+            vercel promote "$DEPLOYMENT" --yes --token "$VERCEL_TOKEN"
+          else
+            # Promote the most recent finished deployment for this project.
+            URL=$(vercel ls --token "$VERCEL_TOKEN" 2>/dev/null | awk '/https:\/\//{print $2; exit}')
+            if [ -z "$URL" ]; then
+              echo "Could not resolve latest deployment URL via vercel ls"
+              vercel ls --token "$VERCEL_TOKEN" || true
+              exit 1
+            fi
+            echo "Promoting $URL"
+            vercel promote "$URL" --yes --token "$VERCEL_TOKEN"
+          fi
+          echo "Verify: curl -sS https://stat-vibe.vercel.app/api/health && curl -sS https://stat-vibe.vercel.app/sw.js | head -5"
