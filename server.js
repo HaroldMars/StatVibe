@@ -369,6 +369,9 @@ function handleHealth(res) {
       status: 'ok', version: VERSION, uptime_s: Math.round((Date.now() - START) / 1000),
       ollama: { host: OLLAMA, online: m.length > 0, models: m }, hosted_ai: hostedConfigured(), simulate_only: config.simulateOnly, admin_user: ADMIN_USER,
       storage,
+      // Vercel injects these on every deploy — used to confirm which build the production alias serves.
+      commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.STATVIBE_COMMIT || null,
+      deployment: process.env.VERCEL_DEPLOYMENT_ID || null,
     })
   );
 }
@@ -1186,7 +1189,10 @@ function serveStatic(req, res) {
   const filePath = path.join(STATIC_DIR, normalizedRel);
   if (!filePath.startsWith(STATIC_DIR)) return send(res, 403, 'Forbidden');
   const ext = path.extname(filePath).toLowerCase();
-  const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
+  // HTML + service worker must never be sticky — stale SW pins users on old UI.
+  const cache = (ext === '.html' || normalizedRel === '/sw.js')
+    ? 'public, max-age=0, must-revalidate'
+    : 'public, max-age=3600';
 
   fs.readFile(filePath, (err, data) => {
     if (!err) return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });

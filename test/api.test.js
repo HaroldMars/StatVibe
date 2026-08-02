@@ -63,6 +63,10 @@ test('GET /api/health → ok with version + security headers', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.status, 'ok');
   assert.ok(r.json.version, 'has version');
+  assert.ok(r.json.storage && typeof r.json.storage.kind === 'string', 'has storage backend');
+  // commit/deployment are set on Vercel; locally they are null.
+  assert.ok('commit' in r.json, 'exposes commit field');
+  assert.ok('deployment' in r.json, 'exposes deployment field');
   assert.equal(r.headers['x-content-type-options'], 'nosniff');
   assert.ok(r.headers['content-security-policy'], 'has CSP');
 });
