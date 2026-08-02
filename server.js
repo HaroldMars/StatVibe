@@ -530,7 +530,7 @@ async function getAuthUser(req) {
     log('warn', 'auth miss — session user gone ' + s.userId);
     return null;
   }
-  // Sliding 30-day window for registered accounts; shorter for guests.
+  // Sliding year-long window for registered accounts; shorter for guests.
   const ttl = u.isGuest ? GUEST_SESSION_TTL : SESSION_TTL;
   await store.touchSession(token, Date.now() + ttl);
   return { user: u, token };
@@ -594,7 +594,7 @@ async function sessionPayload(res, status, token, user, expiresAt) {
   const total = totalRevenue(account.revenueEntries);
   account.statsDraft = {
     ...(account.statsDraft || { revenue: '', products: '', avgPrice: '' }),
-    revenue: total > 0 ? String(total) : (account.statsDraft && account.statsDraft.revenue) || '',
+    revenue: (account.revenueEntries || []).length ? String(total) : (account.statsDraft && account.statsDraft.revenue) || '',
   };
   const prevUsed = account.aiUsed;
   const prevStart = account.aiPeriodStart;
@@ -623,6 +623,15 @@ async function sessionPayload(res, status, token, user, expiresAt) {
 async function handleAuth(req, res, sub, body) {
   // POST /api/auth/register|login|guest|logout|change-password ; GET /api/auth/me
   if (sub === 'register' && req.method === 'POST') {
+    const backend = await store.backend();
+    // Never silently write registered accounts to ephemeral /tmp on Vercel.
+    if (!backend.durable) {
+      log('error', 'register blocked — storage not durable (' + backend.kind + ')');
+      return sendJSON(res, 503, {
+        error: 'Account storage is not configured on this server, so new accounts cannot be saved. Please try again later.',
+        code: 'storage_unavailable',
+      });
+    }
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON', code: 'invalid_json' });
     const email = auth.normalizeEmail(b.email);
     const name = (b.name || '').trim();
@@ -636,10 +645,29 @@ async function handleAuth(req, res, sub, body) {
       log('info', 'register rejected — email taken: ' + email);
       return sendJSON(res, 409, { error: 'An account already exists with that email. Sign in instead.', code: 'email_taken' });
     }
-    const { token, user, expiresAt } = await bootstrapUser({
-      isGuest: false, email, name,
-      phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
-    });
+    let boot;
+    try {
+      boot = await bootstrapUser({
+        isGuest: false, email, name,
+        phone: b.phone ? String(b.phone) : null, passwordHash: auth.hashPassword(b.password), termsAcceptedAt: Date.now(),
+      });
+    } catch (e) {
+      log('error', 'register persist failed: ' + (e && e.message));
+      return sendJSON(res, 503, {
+        error: 'Could not save your account. Please try again in a moment.',
+        code: 'storage_unavailable',
+      });
+    }
+    const { token, user, expiresAt } = boot;
+    // Confirm the durable store can read the new user back (guards Cloudinary races).
+    const verify = await store.getUserByEmail(email);
+    if (!verify || verify.id !== user.id) {
+      log('error', 'register verify miss after persist: ' + email);
+      return sendJSON(res, 503, {
+        error: 'Account was created but could not be confirmed. Please try signing in, or create the account again.',
+        code: 'storage_unavailable',
+      });
+    }
     log('info', 'registered ' + user.email + ' (persistent session, login-ready)');
     return sessionPayload(res, 201, token, user, expiresAt);
   }
@@ -655,12 +683,15 @@ async function handleAuth(req, res, sub, body) {
     if (!auth.emailOk(email)) return sendJSON(res, 400, { error: 'Enter a valid email address', code: 'invalid_email' });
     if (!password) return sendJSON(res, 400, { error: 'Enter your password', code: 'password_required' });
 
+    const backend = await store.backend();
     const u = await store.getUserByEmail(email);
     // Same gate as Google / Meta / banking: only existing registered accounts can sign in.
     if (!u || u.isGuest || !auth.isRegisteredUser(u)) {
-      log('info', 'login failed — account not found: ' + email);
+      log('info', 'login failed — account not found: ' + email + ' (storage=' + backend.kind + ')');
       return sendJSON(res, 401, {
-        error: "Couldn't find a StatVibe account with that email. Create an account to continue.",
+        error: backend.durable
+          ? "Couldn't find a StatVibe account with that email. Create an account to continue."
+          : "Couldn't find that account. This server is not saving accounts permanently — create a new account after storage is configured.",
         code: 'account_not_found',
       });
     }
@@ -671,10 +702,18 @@ async function handleAuth(req, res, sub, body) {
     clearLoginAttempts(rateKey);
     const token = auth.newToken();
     const expiresAt = Date.now() + SESSION_TTL;
-    await store.createSession({
-      token, userId: u.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
-    });
-    await store.updateUser(u.id, { lastLoginAt: Date.now() });
+    try {
+      await store.createSession({
+        token, userId: u.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
+      });
+      await store.updateUser(u.id, { lastLoginAt: Date.now() });
+    } catch (e) {
+      log('error', 'login persist failed: ' + (e && e.message));
+      return sendJSON(res, 503, {
+        error: 'Signed in, but the session could not be saved. Please try again.',
+        code: 'storage_unavailable',
+      });
+    }
     log('info', 'login ' + u.email + ' (session expires ' + new Date(expiresAt).toISOString() + ')');
     return sessionPayload(res, 200, token, u, expiresAt);
   }
@@ -712,7 +751,7 @@ async function handleAuth(req, res, sub, body) {
       token: nt, userId: user.id, createdAt: Date.now(), expiresAt, lastSeenAt: Date.now(),
     });
     log('info', 'password changed ' + user.email);
-    return sendJSON(res, 200, { ok: true, token: nt, session: { expiresAt, ttlDays: 30 } });
+    return sendJSON(res, 200, { ok: true, token: nt, session: { expiresAt, ttlDays: 365, persistent: true } });
   }
   return sendJSON(res, 404, { error: 'Unknown auth endpoint' });
 }

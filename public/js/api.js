@@ -5,6 +5,7 @@ export const STORAGE = {
   LOCAL_TOKEN: 'sv_token',
   SESSION_TOKEN: 'sv_session_token',
   TOKEN_EXPIRES: 'sv_token_expires',
+  USER_SNAPSHOT: 'sv_user',
   THEME: 'sv_theme',
 };
 
@@ -22,8 +23,34 @@ export function persistToken(token, remember, expiresAt) {
       sessionStorage.setItem(STORAGE.SESSION_TOKEN, token);
       localStorage.removeItem(STORAGE.LOCAL_TOKEN);
       localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
+      localStorage.removeItem(STORAGE.USER_SNAPSHOT);
     }
   } catch { /* ignore */ }
+}
+
+/** Cache a privacy-safe user snapshot so boot can restore to Home faster. */
+export function persistUserSnapshot(user) {
+  try {
+    if (!user || user.isGuest) {
+      localStorage.removeItem(STORAGE.USER_SNAPSHOT);
+      return;
+    }
+    localStorage.setItem(STORAGE.USER_SNAPSHOT, JSON.stringify({
+      id: user.id,
+      email: user.email || '',
+      name: user.name || '',
+      tag: user.tag || '',
+    }));
+  } catch { /* ignore */ }
+}
+
+export function readUserSnapshot() {
+  try {
+    const raw = localStorage.getItem(STORAGE.USER_SNAPSHOT);
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u && typeof u === 'object' ? u : null;
+  } catch { return null; }
 }
 
 export function clearTokenStorage() {
@@ -31,6 +58,7 @@ export function clearTokenStorage() {
     localStorage.removeItem(STORAGE.LOCAL_TOKEN);
     sessionStorage.removeItem(STORAGE.SESSION_TOKEN);
     localStorage.removeItem(STORAGE.TOKEN_EXPIRES);
+    localStorage.removeItem(STORAGE.USER_SNAPSHOT);
     localStorage.removeItem('sv_remember');
   } catch { /* ignore */ }
 }
@@ -115,7 +143,10 @@ export function applySession(data, opts = {}) {
   if (data.token) {
     state.session.token = data.token;
     state.session.expiresAt = expiresAt || null;
-    if (opts.persist !== false) persistToken(data.token, remember, expiresAt);
+    if (opts.persist !== false) {
+      persistToken(data.token, remember, expiresAt);
+      if (remember) persistUserSnapshot(data.user);
+    }
   }
   state.session.user = data.user;
   state.profile.name = data.user.name || state.profile.name;

@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { STORAGE, api, applySession, clearTokenStorage } from './api.js';
+import { STORAGE, api, applySession, clearTokenStorage, readUserSnapshot } from './api.js';
 import { loadStatsDraft } from './utils.js';
 import { applyTheme } from './theme.js';
 import { go, render, currentScreen } from './router.js';
@@ -32,6 +32,29 @@ export function applyHash() {
   else if (subs.includes(h)) { state.stack = [{ screen: h, params: {} }]; render(); }
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Validate the stored token with the server (like onAuthStateChanged).
+ * Retries briefly so Cloudinary/KV races after a fresh login don't bounce to welcome.
+ */
+async function validateStoredSession() {
+  let last = { status: 0, data: {} };
+  const delays = [0, 400, 1000];
+  for (const wait of delays) {
+    if (wait) await sleep(wait);
+    last = await api('/auth/me');
+    if (last.status === 200 && last.data && last.data.user && last.data.token) return last;
+    // Offline — keep token; don't burn retries.
+    if (last.status === 0) return last;
+    // Hard reject (deleted account / logged out elsewhere) — stop early only on last try,
+    // but 401 can also mean a just-written session hasn't replicated yet, so retry.
+  }
+  return last;
+}
+
 export async function boot() {
   try { const th = localStorage.getItem(STORAGE.THEME); if (th) state.settings.appearance = th; } catch { /* ignore */ }
   applyTheme();
@@ -49,8 +72,8 @@ export async function boot() {
     else tok = sessionStorage.getItem(STORAGE.SESSION_TOKEN);
   } catch { /* ignore */ }
 
-  // Do NOT clear localStorage based on client clock alone — that caused surprise logouts.
-  // Always ask the server; only clear when /auth/me rejects the token.
+  const snap = fromLocal ? readUserSnapshot() : null;
+  if (snap && snap.email) state.auth.emailDraft = snap.email;
 
   // Logo splash only when a previous session exists; otherwise skip straight to welcome.
   state.session.restoring = !!tok;
@@ -66,13 +89,7 @@ export async function boot() {
 
   if (tok) {
     state.session.token = tok;
-    let status, data;
-    ({ status, data } = await api('/auth/me'));
-    // One retry — serverless/Cloudinary can briefly miss a just-written session.
-    if (!(status === 200 && data && data.user && data.token)) {
-      await new Promise((r) => setTimeout(r, 350));
-      ({ status, data } = await api('/auth/me'));
-    }
+    const { status, data } = await validateStoredSession();
     const valid = status === 200 && data && data.user && data.token;
     // Persisted localStorage sessions must be real registered accounts — never restore a guest from localStorage.
     if (valid && fromLocal && data.user.isGuest) {
@@ -88,15 +105,25 @@ export async function boot() {
         await Promise.all([loadIdeas(), loadHistory(), loadConversations()]);
       }
     } else if (status === 0) {
-      // Offline with a stored token — keep the token; show app shell when possible after reconnect.
+      // Offline with a stored token — keep the token; show login with a soft note after splash.
       state.session.token = tok;
       state.authed = false;
+      if (snap && snap.email) {
+        state.auth.emailDraft = snap.email;
+        state.auth.formError = 'You appear offline. Your session is saved — reconnect and open the app again, or log in.';
+        state.auth.formCode = 'offline';
+        state.stack = [{ screen: 'login', params: {} }];
+      }
     } else {
       // Server explicitly rejected the session (logout elsewhere, deleted account, etc.).
       clearTokenStorage();
       state.session.token = null;
       state.session.user = null;
       state.authed = false;
+      if (snap && snap.email) {
+        state.auth.emailDraft = snap.email;
+        state.stack = [{ screen: 'login', params: {} }];
+      }
     }
   }
   state.session.restoring = false;

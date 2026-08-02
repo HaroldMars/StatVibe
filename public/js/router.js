@@ -10,9 +10,10 @@ export function push(screen, params = {}) { state.stack.push({ screen, params })
 export function back() { state.stack.pop(); render(); }
 
 function splashScreen() {
-  return `<div class="splash" role="status" aria-label="Loading StatVibe">
+  return `<div class="splash" role="status" aria-label="Restoring your StatVibe session">
     <img class="splash-logo" src="${imgSrc('/logo-main.png', { w: 192, h: 192 })}" alt="StatVibe" width="88" height="88" />
     <div class="splash-name">StatVibe</div>
+    <div class="splash-sub">Restoring your session…</div>
   </div>`;
 }
 

@@ -13,6 +13,8 @@ function authErrorBanner() {
     action = `<button type="button" class="auth-error-link" data-act="toRegister">Create an account</button>`;
   } else if (code === 'email_taken') {
     action = `<button type="button" class="auth-error-link" data-act="toLogin">Sign in</button>`;
+  } else if (code === 'storage_unavailable') {
+    action = `<button type="button" class="auth-error-link" data-act="toLogin">Try again</button>`;
   }
   return `<div class="auth-error" role="alert">${esc(msg)}${action ? ' ' + action : ''}</div>`;
 }
@@ -48,7 +50,7 @@ screens.register = () => `
   ${appbar('Create account')}
   <div class="scroll" style="padding:14px 22px 24px">
     <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Create your StatVibe account</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">You'll use this email and password to sign in on any device.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">You'll use this email and password to sign in on any device. This device stays signed in until you log out.</div>
     ${authErrorBanner()}
     <form id="registerForm" autocomplete="on">
       <div class="field"><label for="regName">Full name</label><input id="regName" name="name" type="text" placeholder="Sam Rivera" autocomplete="name" required minlength="2" /></div>
@@ -78,7 +80,7 @@ screens.login = () => `
   ${appbar('Log in')}
   <div class="scroll" style="padding:14px 22px 24px">
     <div style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">Log in to StatVibe</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Use the email and password from your registered account.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Use the email and password from your registered account. Sessions stay signed in on this device until you log out.</div>
     ${authErrorBanner()}
     <form id="loginForm" autocomplete="on">
       <div class="field"><label for="loginEmail">Email</label><input id="loginEmail" name="email" type="email" placeholder="you@business.com" autocomplete="username" required value="${esc(state.auth.emailDraft || '')}" /></div>

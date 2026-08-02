@@ -255,6 +255,39 @@ test('login session persists and /auth/me restores it', async () => {
   assert.equal(me.json.session.persistent, true);
 });
 
+test('login is case-insensitive on email and restores via /auth/me', async () => {
+  const email = 'CaseUser@Example.COM';
+  const reg = await req('POST', '/api/auth/register', {
+    body: { email, password: 'password1', name: 'Case User', acceptedTerms: true },
+  });
+  assert.equal(reg.status, 201);
+  assert.equal(reg.json.user.email, 'caseuser@example.com');
+  assert.equal(reg.json.session.persistent, true);
+
+  const login = await req('POST', '/api/auth/login', {
+    body: { email: 'CASEUSER@example.com', password: 'password1' },
+  });
+  assert.equal(login.status, 200);
+  assert.ok(login.json.token);
+  assert.equal(login.json.user.email, 'caseuser@example.com');
+
+  const me = await req('GET', '/api/auth/me', { headers: auth(login.json.token) });
+  assert.equal(me.status, 200);
+  assert.equal(me.json.token, login.json.token);
+  assert.equal(me.json.user.email, 'caseuser@example.com');
+  assert.ok(me.json.session.expiresAt > Date.now());
+});
+
+test('logout clears the server session so /auth/me fails', async () => {
+  const login = await req('POST', '/api/auth/login', { body: { email: 'caseuser@example.com', password: 'password1' } });
+  assert.equal(login.status, 200);
+  const out = await req('POST', '/api/auth/logout', { headers: auth(login.json.token) });
+  assert.equal(out.status, 200);
+  const me = await req('GET', '/api/auth/me', { headers: auth(login.json.token) });
+  assert.equal(me.status, 401);
+  assert.equal(me.json.code, 'not_signed_in');
+});
+
 test('guest session works and is flagged', async () => {
   const r = await req('POST', '/api/auth/guest');
   assert.equal(r.status, 201);
