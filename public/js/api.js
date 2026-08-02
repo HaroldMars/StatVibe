@@ -8,7 +8,7 @@ export const STORAGE = {
   THEME: 'sv_theme',
 };
 
-const PLAN_LIMITS = { Free: 1000, Pro: 10000, Business: 50000, Enterprise: 999999 };
+const PLAN_LIMITS = { Free: 50000, Pro: 1000000, Business: 5000000, Enterprise: 999999999 };
 
 /** Persist a registered-account token until logout. Guests stay tab-only. */
 export function persistToken(token, remember, expiresAt) {
@@ -68,7 +68,7 @@ export function applyUsage(usage) {
   if (!usage || typeof usage !== 'object') return;
   state.usage = {
     used: Number(usage.used) || 0,
-    limit: Number(usage.limit) || state.usage.limit || 1000,
+    limit: Number(usage.limit) || state.usage.limit || 50000,
     resetDays: usage.resetDays == null ? state.usage.resetDays : usage.resetDays,
     resetAt: usage.resetAt || null,
     period: usage.period || state.usage.period || 'week',
@@ -134,7 +134,7 @@ export function applySession(data, opts = {}) {
     // Derive from account fields if older payloads omit usage.
     applyUsage({
       used: data.account.aiUsed || 0,
-      limit: PLAN_LIMITS[data.account.plan] || 1000,
+      limit: PLAN_LIMITS[data.account.plan] || 50000,
       resetDays: data.account.aiResetDays,
       plan: data.account.plan || 'Free',
       period: (data.account.plan || 'Free') === 'Free' ? 'week' : 'month',

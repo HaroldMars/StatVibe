@@ -163,8 +163,8 @@ export function qrSheet() {
 }
 export async function paymentSheet() {
   const u = state.session.user || {};
-  const priceMap = { Free: 0, Pro: 29, Business: 79 };
-  const amount = priceMap[state.plan] || 79;
+  const priceMap = { Free: 0, Pro: 1699, Business: 4499 };
+  const amount = priceMap[state.plan] || 1699;
   openSheet(`<h3>Payment method</h3>
     <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Pay via GCash, Maya or bank through <b>PayMongo</b> (QRPh). Scan the QR to pay for your subscription.</div>
     <div id="payBox" style="text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px">
@@ -211,7 +211,7 @@ export async function doUpgrade(name) {
     if (data.usage) {
       state.usage = {
         used: data.usage.used || 0,
-        limit: data.usage.limit || data.usageLimit || 1000,
+        limit: data.usage.limit || data.usageLimit || 50000,
         resetDays: data.usage.resetDays,
         resetAt: data.usage.resetAt,
         period: data.usage.period || 'month',
