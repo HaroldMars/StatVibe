@@ -20,8 +20,14 @@ export const statNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 export const hasStatInputs = () => {
+  const entries = (state.session.account && state.session.account.revenueEntries) || [];
+  if (entries.length > 0) return true;
   const s = state.statsDraft || {};
-  return statNum(s.revenue) > 0 && statNum(s.products) > 0 && statNum(s.avgPrice) > 0;
+  return statNum(s.revenue) > 0;
+};
+export const hasRevenueEntries = () => {
+  const entries = (state.session.account && state.session.account.revenueEntries) || [];
+  return entries.length > 0;
 };
 export function loadStatsDraft() {
   try {
@@ -50,6 +56,14 @@ export function applyWorkspaceFromAccount(account) {
       avgPrice: account.statsDraft.avgPrice || '',
     };
     saveStatsDraftLocalOnly();
+  }
+  if (Array.isArray(account.revenueEntries)) {
+    // entries live on account; sync derived total into draft for display/AI
+    const sum = account.revenueEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    state.statsDraft = {
+      ...(state.statsDraft || {}),
+      revenue: sum > 0 ? String(sum) : (state.statsDraft && state.statsDraft.revenue) || '',
+    };
   }
   if (account.calc && typeof account.calc === 'object') {
     state.calc = {

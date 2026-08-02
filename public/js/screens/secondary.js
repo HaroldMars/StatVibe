@@ -4,32 +4,56 @@ import { appbar } from '../chrome.js';
 import {
   esc, money, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
 } from '../utils.js';
+import { totalRevenue, cumulativeSeries, seriesToSvg } from '../revenue-math.js';
 
 export const screens = {};
 
 screens.revenue = () => {
-  const inv = state.session.inventory || [];
-  const totalValue = inv.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.stock) || 0), 0);
-  const topProducts = inv.slice().sort((a, b) => ((Number(b.price) || 0) * (Number(b.stock) || 0)) - ((Number(a.price) || 0) * (Number(a.stock) || 0))).slice(0, 5);
+  const entries = ((state.session.account && state.session.account.revenueEntries) || [])
+    .slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const total = totalRevenue(entries);
+  const period = state.revenuePeriod || 'day';
+  const series = cumulativeSeries(entries, period);
+  const { line, area } = seriesToSvg(series);
+  const periodLabel = period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Day';
   return `
-  ${appbar('Revenue', { right: `<button class="iconbtn" data-act="exportRevenue">${I.download}</button>` })}
+  ${appbar('Revenue', { right: `<button class="iconbtn" data-act="addRevenue" title="Add revenue">+</button>` })}
   <div class="scroll" style="padding:8px 18px 20px">
-    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">${money(totalValue)}</div></div>
-    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:14px">Total inventory value · ${inv.length} product${inv.length !== 1 ? 's' : ''}</div>
-    ${!inv.length ? `
+    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">${money(total)}</div></div>
+    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:10px">Sum of ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · updates live when you add</div>
+    <div class="flex gap-8 mb-12">
+      ${['day', 'week', 'month'].map((p) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px;text-transform:capitalize">${p}</button>`).join('')}
+    </div>
+    ${!entries.length ? `
     <div class="card" style="text-align:center;padding:28px 20px">
       <div style="font-size:36px;margin-bottom:10px">📈</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No revenue data yet</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add products and inventory to see your revenue breakdown here.</div>
-      <button class="btn" data-tab="calc">Add products</button>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No revenue entries yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add your first amount. Each sale is a new entry — the chart grows as revenue comes in.</div>
+      <button class="btn" data-act="addRevenue">Add revenue</button>
     </div>` : `
-    <div class="eyebrow mb-10">Top products by value</div>
+    <div class="card mb-14" style="padding:14px 14px 10px">
+      <div class="eyebrow mb-8">Cumulative · ${periodLabel}</div>
+      <svg viewBox="0 0 300 100" width="100%" height="100" preserveAspectRatio="none" aria-label="Cumulative revenue">
+        <defs><linearGradient id="svRevFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F766E" stop-opacity=".28"/><stop offset="1" stop-color="#0F766E" stop-opacity="0"/></linearGradient></defs>
+        <path d="${area}" fill="url(#svRevFill)"/>
+        <path d="${line}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="eyebrow mb-10">Entries (newest first)</div>
     <div class="list">
-      ${topProducts.map((it) => {
-        const val = (Number(it.price) || 0) * (Number(it.stock) || 0);
-        return `<div class="row" style="cursor:default"><div><div style="font-size:13px;font-weight:500">${esc(it.name)}</div><div style="font-size:11px;color:var(--muted-2)">${Number(it.stock).toLocaleString()} ${esc(it.unit || 'units')}</div></div><div style="text-align:right"><div class="mono" style="font-size:13px;font-weight:500">${money(val)}</div><div style="font-size:11px;color:var(--muted-2)">${money(it.price)} each</div></div></div>`;
+      ${entries.map((e) => {
+        const when = e.createdAt ? new Date(e.createdAt).toLocaleString() : '—';
+        return `<button class="row" data-act="editRevenue" data-id="${esc(e.id)}" style="text-align:left">
+          <div>
+            <div style="font-size:13px;font-weight:500">${money(e.amount)}</div>
+            <div style="font-size:11px;color:var(--muted-2)">${esc(e.note || e.category || 'Revenue')} · ${esc(when)}</div>
+          </div>
+          <span class="val">Edit ›</span>
+        </button>`;
       }).join('')}
-    </div>`}
+    </div>
+    <button class="btn" data-act="addRevenue" style="margin-top:14px">Add revenue</button>`}
   </div>`;
 };
 

@@ -25,6 +25,7 @@ import {
   downloadSheet, exportData, qrSheet, paymentSheet, deleteAccountConfirm,
   editBusinessSheet, currencySheet, doUpgrade,
 } from './features/account.js';
+import { addRevenueSheet, editRevenueSheet } from './features/revenue.js';
 
 export function wire(root) {
   // Bind the delegated click handler exactly once — #app persists across
@@ -172,6 +173,16 @@ export function bindClicks(root) {
       case 'refineAI': if (state.lastAIOutput) runWorkspace('Refine and tighten this document, keeping the same structure:\n\n' + state.lastAIOutput.content, state.lastAIOutput.title); break;
       case 'copyOutput': navigator.clipboard && navigator.clipboard.writeText(state.lastAIOutput ? state.lastAIOutput.content : '').then(() => toast('Copied to clipboard')); break;
       case 'exportOutput': case 'exportRevenue': toast('Exported'); break;
+      case 'addRevenue': addRevenueSheet(); break;
+      case 'editRevenue': editRevenueSheet(t.dataset.id); break;
+      case 'revenuePeriod': {
+        const p = t.dataset.p;
+        if (p === 'day' || p === 'week' || p === 'month') {
+          state.revenuePeriod = p;
+          render();
+        }
+        break;
+      }
       case 'outputMenu': openSheet(`<h3>${esc(state.lastAIOutput ? state.lastAIOutput.title : 'Document')}</h3><div class="list" style="margin-top:12px"><button class="row" data-close><span>Duplicate</span></button><button class="row" data-close><span>Share link</span></button><button class="row" data-close><span style="color:var(--red)">Delete</span></button></div>`); break;
 
       // agent / messaging
