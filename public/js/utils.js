@@ -14,7 +14,21 @@ export function currency() {
   const code = (state.session.account && state.session.account.currency) || 'USD';
   return (state.session.currencies || []).find((c) => c.code === code) || { code, symbol: '$', dp: 2 };
 }
-export const money = (n) => { const c = currency(); return c.symbol + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: c.dp, maximumFractionDigits: c.dp }); };
+export const money = (n) => {
+  const c = currency();
+  const v = Number(n);
+  const num = Number.isFinite(v) ? v : 0;
+  const abs = Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: c.dp, maximumFractionDigits: c.dp });
+  if (num < 0) return `-${c.symbol}${abs}`;
+  return c.symbol + abs;
+};
+/** Signed money with leading + for gains (Stripe-style delta labels). */
+export const moneyDelta = (n) => {
+  const v = Number(n);
+  const num = Number.isFinite(v) ? v : 0;
+  if (num > 0) return '+' + money(num);
+  return money(num);
+};
 export const statNum = (v) => {
   const n = Number(String(v || '').replace(/[^\d.-]/g, ''));
   return Number.isFinite(n) ? n : 0;
@@ -58,11 +72,11 @@ export function applyWorkspaceFromAccount(account) {
     saveStatsDraftLocalOnly();
   }
   if (Array.isArray(account.revenueEntries)) {
-    // entries live on account; sync derived total into draft for display/AI
+    // Sync signed ledger total (can fall to 0 / negative after refunds).
     const sum = account.revenueEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     state.statsDraft = {
       ...(state.statsDraft || {}),
-      revenue: sum > 0 ? String(sum) : (state.statsDraft && state.statsDraft.revenue) || '',
+      revenue: account.revenueEntries.length ? String(sum) : (state.statsDraft && state.statsDraft.revenue) || '',
     };
   }
   if (account.calc && typeof account.calc === 'object') {

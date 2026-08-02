@@ -2,9 +2,9 @@ import { state } from '../state.js';
 import { I } from '../icons.js';
 import { appbar } from '../chrome.js';
 import {
-  esc, money, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
+  esc, money, moneyDelta, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
 } from '../utils.js';
-import { totalRevenue, cumulativeSeries, seriesToSvg } from '../revenue-math.js';
+import { totalRevenue, cumulativeSeries, chartSvgMarkup, periodDelta } from '../revenue-math.js';
 
 export const screens = {};
 
@@ -15,45 +15,57 @@ screens.revenue = () => {
   const total = totalRevenue(entries);
   const period = state.revenuePeriod || 'live';
   const series = cumulativeSeries(entries, period);
-  const { line, area } = seriesToSvg(series);
+  const chart = chartSvgMarkup(series, { gradId: 'svRevFill' });
+  const delta = periodDelta(series);
+  const deltaCls = delta.direction === 'down' ? 'down' : delta.direction === 'up' ? 'up' : 'flat';
   const periodLabel = period === 'week' ? 'Week' : period === 'month' ? 'Month' : period === 'day' ? 'Day' : 'Live';
   return `
-  ${appbar('Revenue', { right: `<button class="iconbtn" data-act="addRevenue" title="Add revenue">+</button>` })}
+  ${appbar('Revenue', { right: `<div class="flex gap-8"><button class="iconbtn" data-act="addRefund" title="Log refund">−</button><button class="iconbtn" data-act="addRevenue" title="Add sale">+</button></div>` })}
   <div class="scroll" style="padding:8px 18px 20px">
-    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px"><div class="big-num" style="font-size:32px">${money(total)}</div></div>
-    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:10px">Sum of ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · updates live when you add</div>
+    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px;flex-wrap:wrap">
+      <div class="big-num" style="font-size:32px${total < 0 ? ';color:var(--red)' : ''}">${money(total)}</div>
+      ${entries.length ? `<span class="delta ${deltaCls}">${delta.direction === 'down' ? '▼' : delta.direction === 'up' ? '▲' : '●'} ${moneyDelta(delta.abs)}</span>` : ''}
+    </div>
+    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:10px">Net volume · ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · line drops on refunds &amp; edits</div>
     <div class="flex gap-8 mb-12 flex-wrap">
       ${[['live', 'Live'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([p, lab]) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px">${lab}</button>`).join('')}
     </div>
     ${!entries.length ? `
     <div class="card" style="text-align:center;padding:28px 20px">
       <div style="font-size:36px;margin-bottom:10px">📈</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No revenue entries yet</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add your first amount. Each sale is a new entry — the chart grows as revenue comes in.</div>
-      <button class="btn" data-act="addRevenue">Add revenue</button>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No ledger yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add a sale or refund. The chart tracks net revenue up and down in real time — same idea as Stripe net volume.</div>
+      <button class="btn" data-act="addRevenue">Add sale</button>
+      <button class="btn outline" data-act="addRefund" style="margin-top:8px">Log refund</button>
     </div>` : `
     <div class="card mb-14" style="padding:14px 14px 10px">
-      <div class="eyebrow mb-8">Cumulative · ${periodLabel}</div>
-      <svg viewBox="0 0 300 100" width="100%" height="100" preserveAspectRatio="none" aria-label="Cumulative revenue">
-        <defs><linearGradient id="svRevFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F766E" stop-opacity=".28"/><stop offset="1" stop-color="#0F766E" stop-opacity="0"/></linearGradient></defs>
-        <path d="${area}" fill="url(#svRevFill)"/>
-        <path d="${line}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      <div class="eyebrow mb-8">Net volume · ${periodLabel}</div>
+      ${chart.html}
     </div>
-    <div class="eyebrow mb-10">Entries (newest first)</div>
+    <div class="eyebrow mb-10">Ledger (newest first)</div>
     <div class="list">
       ${entries.map((e) => {
         const when = e.createdAt ? new Date(e.createdAt).toLocaleString() : '—';
+        const amt = Number(e.amount) || 0;
+        const kind = e.kind === 'refund' || amt < 0 ? 'refund' : e.kind === 'adjustment' ? 'adj' : 'sale';
+        const kindChip = kind === 'refund'
+          ? '<span class="tagchip" style="color:var(--red);background:var(--red-tint)">refund</span>'
+          : kind === 'adj'
+            ? '<span class="tagchip grey">adj</span>'
+            : '<span class="tagchip green">sale</span>';
         return `<button class="row" data-act="editRevenue" data-id="${esc(e.id)}" style="text-align:left">
           <div>
-            <div style="font-size:13px;font-weight:500">${money(e.amount)}</div>
-            <div style="font-size:11px;color:var(--muted-2)">${esc(e.note || e.category || 'Revenue')} · ${esc(when)}</div>
+            <div style="font-size:13px;font-weight:500${amt < 0 ? ';color:var(--red)' : ''}">${amt > 0 ? '+' : ''}${money(amt)}</div>
+            <div style="font-size:11px;color:var(--muted-2);display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">${kindChip}<span>${esc(e.note || e.category || 'Entry')} · ${esc(when)}</span></div>
           </div>
           <span class="val">Edit ›</span>
         </button>`;
       }).join('')}
     </div>
-    <button class="btn" data-act="addRevenue" style="margin-top:14px">Add revenue</button>`}
+    <div class="grid-2" style="gap:8px;margin-top:14px">
+      <button class="btn outline" data-act="addRefund">Log refund</button>
+      <button class="btn" data-act="addRevenue">Add sale</button>
+    </div>`}
   </div>`;
 };
 

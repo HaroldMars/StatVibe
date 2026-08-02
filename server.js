@@ -915,7 +915,7 @@ function handleMeta(res) {
   });
 }
 
-// --- Revenue log (append-only entries; total = sum; chart = cumulative) ----
+// --- Revenue ledger (sales + refunds; total = sum; chart rises and falls) ----
 async function handleRevenue(req, res, sub, body) {
   const authed = await getAuthUser(req);
   if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
@@ -933,7 +933,7 @@ async function handleRevenue(req, res, sub, body) {
   if (sub === '' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
     const entry = sanitizeEntry({ ...b, id: undefined, createdAt: b.createdAt || Date.now() });
-    if (!entry) return sendJSON(res, 400, { error: 'Enter a positive amount', code: 'invalid_amount' });
+    if (!entry) return sendJSON(res, 400, { error: 'Enter a non-zero amount (sales or refunds)', code: 'invalid_amount' });
     acct.revenueEntries = sanitizeEntries([...(acct.revenueEntries || []), entry]);
     const total = totalRevenue(acct.revenueEntries);
     acct.statsDraft = { ...(acct.statsDraft || {}), revenue: String(total) };
@@ -951,7 +951,7 @@ async function handleRevenue(req, res, sub, body) {
     if (b.amount !== undefined) merged.amount = b.amount;
     if (b.createdAt !== undefined) merged.createdAt = b.createdAt;
     const next = sanitizeEntry(merged, { requireId: true });
-    if (!next) return sendJSON(res, 400, { error: 'Enter a positive amount', code: 'invalid_amount' });
+    if (!next) return sendJSON(res, 400, { error: 'Enter a non-zero amount (sales or refunds)', code: 'invalid_amount' });
     list[idx] = next;
     acct.revenueEntries = sanitizeEntries(list);
     const total = totalRevenue(acct.revenueEntries);
@@ -965,7 +965,11 @@ async function handleRevenue(req, res, sub, body) {
     if (list.length === (acct.revenueEntries || []).length) return sendJSON(res, 404, { error: 'Entry not found' });
     acct.revenueEntries = list;
     const total = totalRevenue(list);
-    acct.statsDraft = { ...(acct.statsDraft || {}), revenue: total > 0 ? String(total) : '' };
+    // Keep signed total (incl. 0 / negative after refunds) while ledger has rows.
+    acct.statsDraft = {
+      ...(acct.statsDraft || {}),
+      revenue: list.length ? String(total) : '',
+    };
     await store.setAccount(user.id, acct);
     return sendJSON(res, 200, { ok: true, entries: list, total, account: acct });
   }

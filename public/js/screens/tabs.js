@@ -3,10 +3,10 @@ import { I } from '../icons.js';
 import { tabbar } from '../chrome.js';
 import {
   esc, money, currency, calcSummary, hasStatInputs, statNum, bizName, userName,
-  initials, convAvatar, relTime,
+  initials, convAvatar, relTime, moneyDelta,
 } from '../utils.js';
 import { computeRetail, computeProduct } from '../calc-math.js';
-import { totalRevenue, cumulativeSeries, seriesToSvg } from '../revenue-math.js';
+import { totalRevenue, cumulativeSeries, chartSvgMarkup, periodDelta } from '../revenue-math.js';
 
 export const tabScreens = {};
 export const screens = {};
@@ -24,8 +24,9 @@ export function statsCard() {
     <div class="card mb-12" style="text-align:center;padding:28px 20px">
       <div style="font-size:36px;margin-bottom:10px">📊</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:6px">No revenue yet</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Log each sale as its own entry. Your total and line chart grow in real time as you add amounts.</div>
-      <button class="btn" data-act="addRevenue">Add revenue</button>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px">Log sales and refunds. The net volume line rises and falls in real time — like Stripe or Shopify.</div>
+      <button class="btn" data-act="addRevenue">Add sale</button>
+      <button class="btn outline" data-act="addRefund" style="margin-top:8px">Log refund</button>
     </div>
     <div class="grid-3 mb-12">
       ${[['Revenue', money(0), '—', 'up'], ['Products', products ? products.toLocaleString() : '0', '—', 'up'], ['Avg price', avgPrice ? money(avgPrice) : money(0), '—', 'up']]
@@ -35,33 +36,34 @@ export function statsCard() {
   const totalStock = products || inv.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
   const period = state.revenuePeriod || 'live';
   const series = cumulativeSeries(entries, period);
-  const { line, area } = seriesToSvg(series);
-  const periodLabel = period === 'week' ? 'by week' : period === 'month' ? 'by month' : period === 'day' ? 'by day' : 'each sale';
+  const chart = chartSvgMarkup(series, { gradId: 'svStatsFill' });
+  const delta = periodDelta(series);
+  const deltaCls = delta.direction === 'down' ? 'down' : delta.direction === 'up' ? 'up' : 'flat';
+  const periodLabel = period === 'week' ? 'by week' : period === 'month' ? 'by month' : period === 'day' ? 'by day' : 'each entry';
   const cs = calcSummary();
-  const askQ = `Analyze my business. Stats: revenue ${money(revenue)} across ${entries.length} entries, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
+  const askQ = `Analyze my business. Stats: net revenue ${money(revenue)} across ${entries.length} ledger entries, products sold ${totalStock}, average price ${money(avgPrice)}. Calculator — Retail shelf price ${money(cs.retail.price)} from ${cs.retail.markup}% markup (${cs.retail.margin.toFixed(1)}% margin, profit ${money(cs.retail.profit)}/unit). Product target-margin price ${money(cs.product.price)} at ${cs.product.targetMargin}% gross margin (cost ${money(cs.product.cost)}, profit ${money(cs.product.profit)}/unit). Supply on hand ${cs.onHand.toLocaleString()} across ${cs.items} SKUs. Give me 3 concrete actions to grow next month.`;
   return `
     <div class="card mb-12" style="padding:16px 16px 14px">
       <div class="row-between mb-8">
-        <div class="eyebrow" data-act="goto" data-s="revenue" style="cursor:pointer">Revenue · live cumulative</div>
-        <button class="pill" data-act="addRevenue" style="font-size:11px">+ Add</button>
+        <div class="eyebrow" data-act="goto" data-s="revenue" style="cursor:pointer">Net volume · live</div>
+        <div class="flex gap-8">
+          <button class="pill" data-act="addRefund" style="font-size:11px">Refund</button>
+          <button class="pill solid" data-act="addRevenue" style="font-size:11px">+ Sale</button>
+        </div>
       </div>
-      <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px">
-        <div class="big-num" style="font-size:34px">${money(revenue)}</div>
+      <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:2px;flex-wrap:wrap">
+        <div class="big-num" style="font-size:34px${revenue < 0 ? ';color:var(--red)' : ''}">${money(revenue)}</div>
+        <span class="delta ${deltaCls}">${delta.direction === 'down' ? '▼' : delta.direction === 'up' ? '▲' : '●'} ${moneyDelta(delta.abs)}</span>
       </div>
-      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:8px">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${periodLabel}${products ? ` · ${totalStock.toLocaleString()} products` : ''}</div>
+      <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:8px">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${periodLabel} · sales − refunds${products ? ` · ${totalStock.toLocaleString()} products` : ''}</div>
       <div class="flex gap-8 mb-8 flex-wrap">
         ${[['live', 'Live'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([p, lab]) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px">${lab}</button>`).join('')}
       </div>
-      ${series.length ? `
-      <svg viewBox="0 0 300 100" width="100%" height="92" preserveAspectRatio="none" aria-label="Cumulative revenue chart">
-        <defs><linearGradient id="svStatsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F766E" stop-opacity=".28"/><stop offset="1" stop-color="#0F766E" stop-opacity="0"/></linearGradient></defs>
-        <path d="${area}" fill="url(#svStatsFill)"/>
-        <path d="${line}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>` : `<div style="font-size:12px;color:var(--muted);padding:18px 0;text-align:center">Add another entry to see growth over time</div>`}
+      ${series.length ? chart.html : `<div style="font-size:12px;color:var(--muted);padding:18px 0;text-align:center">Add a sale or refund to see the line move</div>`}
     </div>
     <div class="grid-3 mb-12">
-      ${[['Revenue', money(revenue), '', 'up'], ['Products', totalStock ? totalStock.toLocaleString() : '—', '', 'up'], ['Avg price', avgPrice ? money(avgPrice) : '—', '', 'up']]
-        .map(([k, v, d]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px">${v}</div>${d ? `<div style="font-size:10.5px;font-weight:600;margin-top:2px;color:var(--teal)">${d}</div>` : ''}</div>`).join('')}
+      ${[['Net revenue', money(revenue), moneyDelta(delta.abs), deltaCls], ['Products', totalStock ? totalStock.toLocaleString() : '—', '', 'flat'], ['Avg price', avgPrice ? money(avgPrice) : '—', '', 'flat']]
+        .map(([k, v, d, dir]) => `<div class="card" style="padding:11px"><div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:6px">${k}</div><div class="big-num" style="font-size:18px${k === 'Net revenue' && revenue < 0 ? ';color:var(--red)' : ''}">${v}</div>${d ? `<div class="delta ${dir}" style="font-size:10.5px;margin-top:2px">${d}</div>` : ''}</div>`).join('')}
     </div>
     <div class="card mb-12" style="padding:14px 15px">
       <div class="row-between mb-10">
@@ -91,9 +93,10 @@ export function statsCard() {
         ${I.spark('#7FE3C8', 15, true)}
         <span style="font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mint)">Stats insight</span>
       </div>
-      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">You're tracking <b style="color:#fff">${money(revenue)}</b> across <b style="color:#fff">${entries.length}</b> revenue entr${entries.length === 1 ? 'y' : 'ies'}${products ? ` · ${totalStock.toLocaleString()} products` : ''}${avgPrice ? ` · avg ${money(avgPrice)}` : ''}.</div>
+      <div style="font-size:13.5px;line-height:1.5;color:#D8E4E0">Net volume is <b style="color:#fff">${money(revenue)}</b> across <b style="color:#fff">${entries.length}</b> ledger entr${entries.length === 1 ? 'y' : 'ies'}${products ? ` · ${totalStock.toLocaleString()} products` : ''}${avgPrice ? ` · avg ${money(avgPrice)}` : ''}.</div>
       <div class="insight-actions">
-        <button class="btn sm mint" data-act="addRevenue">Add revenue</button>
+        <button class="btn sm mint" data-act="addRevenue">Add sale</button>
+        <button class="btn sm" data-act="addRefund" style="background:rgba(255,255,255,.08);color:#EAF0EE">Refund</button>
         <button class="btn sm" data-act="askAI" data-q="${esc(askQ)}" style="flex:1;background:rgba(255,255,255,.08);color:#EAF0EE">Ask AI</button>
       </div>
     </div>`;

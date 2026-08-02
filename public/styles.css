@@ -341,6 +341,7 @@ body {
 .delta { font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 3px; }
 .delta.up { color: var(--teal); }
 .delta.down { color: var(--red); }
+.delta.flat { color: var(--muted-2); }
 
 /* Segmented control */
 .segmented {

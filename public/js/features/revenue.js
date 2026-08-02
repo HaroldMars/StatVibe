@@ -13,10 +13,12 @@ export function applyRevenuePayload(data) {
     state.session.account = { ...state.session.account, revenueEntries: data.entries };
   }
   if (state.session.account) {
-    const total = data.total != null ? data.total : totalRevenue(state.session.account.revenueEntries);
+    const entries = state.session.account.revenueEntries || [];
+    const total = data.total != null ? data.total : totalRevenue(entries);
     state.session.account.statsDraft = {
       ...(state.session.account.statsDraft || {}),
-      revenue: total > 0 ? String(total) : '',
+      // Keep derived total even when 0 / negative after refunds.
+      revenue: entries.length ? String(total) : '',
     };
     state.statsDraft = {
       ...(state.statsDraft || {}),
@@ -27,64 +29,79 @@ export function applyRevenuePayload(data) {
   }
 }
 
-export function addRevenueSheet() {
-  openSheet(`<h3>Add revenue</h3>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 12px">Each amount is a new entry. Your total and chart update automatically.</div>
-    <div class="field"><label>Amount</label><input id="revAmount" inputmode="decimal" placeholder="e.g. 2500" autofocus/></div>
-    <div class="field"><label>Note (optional)</label><input id="revNote" placeholder="e.g. Walk-in sales"/></div>
-    <div class="field"><label>Category (optional)</label><input id="revCat" placeholder="e.g. Retail"/></div>
-    <button class="btn" id="revSave">Add entry</button>`);
+function openEntrySheet({ title, kind = 'sale', entry = null } = {}) {
+  const isRefund = kind === 'refund';
+  const editing = !!entry;
+  openSheet(`<h3>${esc(title)}</h3>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 12px">${
+      isRefund
+        ? 'Refunds / returns lower your total — the line chart drops in real time (like Stripe net volume).'
+        : 'Each sale is a new entry. Edit or refund later and the chart updates live.'
+    }</div>
+    <div class="field"><label>Amount</label><input id="revAmount" inputmode="decimal" placeholder="e.g. 2500" value="${esc(entry ? String(Math.abs(Number(entry.amount) || 0)) : '')}" autofocus/></div>
+    <div class="field"><label>Note (optional)</label><input id="revNote" placeholder="${isRefund ? 'e.g. Returned order #104' : 'e.g. Walk-in sales'}" value="${esc((entry && entry.note) || '')}"/></div>
+    <div class="field"><label>Category (optional)</label><input id="revCat" placeholder="e.g. Retail" value="${esc((entry && entry.category) || '')}"/></div>
+    <button class="btn" id="revSave">${editing ? 'Save changes' : (isRefund ? 'Log refund' : 'Add sale')}</button>
+    ${editing ? '<button class="btn outline" id="revDel" style="margin-top:8px;color:var(--red)">Delete entry</button>' : ''}
+    ${!editing ? `<button class="btn outline" id="revOther" style="margin-top:8px">${isRefund ? 'Add a sale instead' : 'Log a refund instead'}</button>` : ''}`);
   setTimeout(() => {
-    const btn = document.getElementById('revSave');
-    if (!btn) return;
-    btn.onclick = async () => {
+    const save = document.getElementById('revSave');
+    const del = document.getElementById('revDel');
+    const other = document.getElementById('revOther');
+    if (other) other.onclick = () => openEntrySheet({ title: isRefund ? 'Add sale' : 'Log refund', kind: isRefund ? 'sale' : 'refund' });
+    if (save) save.onclick = async () => {
       const amount = (document.getElementById('revAmount') || {}).value;
       const note = (document.getElementById('revNote') || {}).value;
       const category = (document.getElementById('revCat') || {}).value;
-      const { status, data } = await api('/revenue', { method: 'POST', body: { amount, note, category } });
-      if (status === 201) {
+      const body = { amount, note, category, kind: editing ? (Number(amount) < 0 || (entry && entry.kind === 'refund') ? 'refund' : kind) : kind };
+      // When editing, respect explicit kind from sheet context if amount positive.
+      if (editing) {
+        body.kind = (entry.kind === 'refund' || isRefund) ? 'refund' : (entry.kind === 'adjustment' ? 'adjustment' : 'sale');
+        // If user is on refund sheet while editing, force refund.
+        if (isRefund) body.kind = 'refund';
+      }
+      let status; let data;
+      if (editing) {
+        ({ status, data } = await api('/revenue/' + encodeURIComponent(entry.id), { method: 'PATCH', body }));
+      } else {
+        ({ status, data } = await api('/revenue', { method: 'POST', body }));
+      }
+      if (status === 201 || status === 200) {
         applyRevenuePayload(data);
         closeSheet();
         render();
-        toast('Revenue added · total ' + money(data.total));
-      } else toast((data && data.error) || 'Could not add revenue');
+        const t = data.total;
+        toast(editing ? 'Entry updated · total ' + money(t) : (isRefund ? 'Refund logged · total ' + money(t) : 'Sale added · total ' + money(t)));
+      } else toast((data && data.error) || 'Could not save');
+    };
+    if (del && entry) del.onclick = async () => {
+      const { status, data } = await api('/revenue/' + encodeURIComponent(entry.id), { method: 'DELETE' });
+      if (status === 200) {
+        applyRevenuePayload(data);
+        closeSheet();
+        render();
+        toast('Entry deleted · total ' + money(data.total));
+      } else toast((data && data.error) || 'Could not delete');
     };
   }, 30);
+}
+
+export function addRevenueSheet() {
+  openEntrySheet({ title: 'Add sale', kind: 'sale' });
+}
+
+export function addRefundSheet() {
+  openEntrySheet({ title: 'Log refund', kind: 'refund' });
 }
 
 export function editRevenueSheet(id) {
   const entries = (state.session.account && state.session.account.revenueEntries) || [];
   const entry = entries.find((e) => e.id === id);
   if (!entry) { toast('Entry not found'); return; }
-  openSheet(`<h3>Edit revenue entry</h3>
-    <div class="field" style="margin-top:12px"><label>Amount</label><input id="revAmount" inputmode="decimal" value="${esc(String(entry.amount))}"/></div>
-    <div class="field"><label>Note</label><input id="revNote" value="${esc(entry.note || '')}"/></div>
-    <div class="field"><label>Category</label><input id="revCat" value="${esc(entry.category || '')}"/></div>
-    <button class="btn" id="revSave">Save changes</button>
-    <button class="btn outline" id="revDel" style="margin-top:8px;color:var(--red)">Delete entry</button>`);
-  setTimeout(() => {
-    const save = document.getElementById('revSave');
-    const del = document.getElementById('revDel');
-    if (save) save.onclick = async () => {
-      const amount = (document.getElementById('revAmount') || {}).value;
-      const note = (document.getElementById('revNote') || {}).value;
-      const category = (document.getElementById('revCat') || {}).value;
-      const { status, data } = await api('/revenue/' + encodeURIComponent(id), { method: 'PATCH', body: { amount, note, category } });
-      if (status === 200) {
-        applyRevenuePayload(data);
-        closeSheet();
-        render();
-        toast('Entry updated');
-      } else toast((data && data.error) || 'Could not save');
-    };
-    if (del) del.onclick = async () => {
-      const { status, data } = await api('/revenue/' + encodeURIComponent(id), { method: 'DELETE' });
-      if (status === 200) {
-        applyRevenuePayload(data);
-        closeSheet();
-        render();
-        toast('Entry deleted');
-      } else toast((data && data.error) || 'Could not delete');
-    };
-  }, 30);
+  const isRefund = entry.kind === 'refund' || Number(entry.amount) < 0;
+  openEntrySheet({
+    title: isRefund ? 'Edit refund' : 'Edit sale',
+    kind: isRefund ? 'refund' : 'sale',
+    entry,
+  });
 }
