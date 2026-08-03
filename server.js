@@ -211,14 +211,23 @@ function simulate(messages) {
 const AI_API_URL = process.env.AI_API_URL;   // e.g. https://api.groq.com/openai/v1/chat/completions
 const AI_API_KEY = process.env.AI_API_KEY;
 const AI_MODEL = process.env.AI_MODEL || 'llama-3.1-8b-instant';
+// Cap output so providers (OpenRouter, etc.) don't reject for requesting the
+// full context window — OpenRouter errors hard when max_tokens > remaining balance.
+const AI_MAX_TOKENS = Math.max(64, Math.min(Number(process.env.AI_MAX_TOKENS) || 2048, 32768));
 const hostedConfigured = () => !!(AI_API_URL && AI_API_KEY);
 async function callHostedAI(messages) {
   const r = await fetch(AI_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI_API_KEY },
-    body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.7, stream: false }),
+    body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.7, stream: false, max_tokens: AI_MAX_TOKENS }),
   });
-  if (!r.ok) throw new Error('status ' + r.status + ' ' + (await r.text()).slice(0, 160));
+  if (!r.ok) {
+    let msg = (await r.text()).slice(0, 300);
+    try { const d = JSON.parse(msg); msg = (d.error && (d.error.message || d.error.code)) || msg; } catch { /* keep raw */ }
+    const err = new Error('status ' + r.status + ' ' + msg);
+    err.status = r.status;
+    throw err;
+  }
   const d = await r.json();
   const content = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
   return { model: AI_MODEL, content, usage: d.usage };
@@ -321,14 +330,25 @@ async function handleChat(req, res, body) {
 
   if (!model) {
     // No local Ollama model — use the hosted OpenAI-compatible API if configured
-    // (this is the production path on Vercel). Falls back to simulated on error.
+    // (this is the production path on Vercel). Surface the real provider error
+    // (e.g. out of credits) instead of silently returning fake "simulated" output.
     if (hostedConfigured()) {
       try {
         const { model: hm, content, usage: tokUsage } = await callHostedAI(messages);
         metrics.byModel[hm] = (metrics.byModel[hm] || 0) + 1;
         recordUsage(hm, tokUsage, promptText, content);
         return finish({ simulated: false, model: hm, content, tokUsage });
-      } catch (e) { metrics.aiErrors++; log('warn', 'hosted AI: ' + e.message); }
+      } catch (e) {
+        metrics.aiErrors++;
+        log('warn', 'hosted AI: ' + e.message);
+        const providerOut = e.status === 402 || e.status === 401 || e.status === 403 || e.status === 429;
+        return sendJSON(res, providerOut ? 502 : 503, {
+          error: 'AI is temporarily unavailable: ' + (e.message || 'provider error'),
+          code: 'ai_unavailable',
+          providerStatus: e.status || null,
+          usage: usageView(acct),
+        });
+      }
     }
     metrics.simulated++;
     const content = simulate(messages);
