@@ -1,0 +1,33 @@
+# Create / update the three separate StatVibe Vercel projects and deploy production.
+#
+# Required secret: VERCEL_TOKEN
+# Optional: VERCEL_ORG_ID (defaults inside script to Illuminary Peak team)
+name: Deploy StatVibe three projects
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type deploy to run'
+        required: true
+        default: ''
+jobs:
+  deploy:
+    if: github.event.inputs.confirm == 'deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Provision + deploy server, client, landing
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "Missing GitHub secret VERCEL_TOKEN"
+            exit 1
+          fi
+          node scripts/deploy-three-projects.mjs

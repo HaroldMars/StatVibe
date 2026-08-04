@@ -1,0 +1,362 @@
+import { state } from '../state.js';
+import { I, iconTile, namedIcon } from '../icons.js';
+import { appbar } from '../chrome.js';
+import {
+  esc, money, moneyDelta, mdToHtml, initials, bizName, currency, CLOUD, guestBanner,
+} from '../utils.js';
+import { totalRevenue, cumulativeSeries, chartSvgMarkup, periodDelta } from '../revenue-math.js';
+
+export const screens = {};
+
+screens.revenue = () => {
+  const entries = ((state.session.account && state.session.account.revenueEntries) || [])
+    .slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const total = totalRevenue(entries);
+  const period = state.revenuePeriod || 'live';
+  const series = cumulativeSeries(entries, period);
+  const chart = chartSvgMarkup(series, { gradId: 'svRevFill' });
+  const delta = periodDelta(series);
+  const deltaCls = delta.direction === 'down' ? 'down' : delta.direction === 'up' ? 'up' : 'flat';
+  const periodLabel = period === 'week' ? 'Week' : period === 'month' ? 'Month' : period === 'day' ? 'Day' : 'Live';
+  return `
+  ${appbar('Revenue', { right: `<div class="flex gap-8"><button class="iconbtn" data-act="addRefund" title="Log refund">−</button><button class="iconbtn" data-act="addRevenue" title="Add sale">+</button></div>` })}
+  <div class="scroll" style="padding:8px 18px 20px">
+    <div class="flex items-center" style="gap:10px;align-items:baseline;margin-bottom:4px;flex-wrap:wrap">
+      <div class="big-num" style="font-size:32px${total < 0 ? ';color:var(--red)' : ''}">${money(total)}</div>
+      ${entries.length ? `<span class="delta ${deltaCls}">${delta.direction === 'down' ? '▼' : delta.direction === 'up' ? '▲' : '●'} ${moneyDelta(delta.abs)}</span>` : ''}
+    </div>
+    <div style="font-size:11.5px;color:var(--muted-2);margin-bottom:10px">Net volume · ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · line drops on refunds &amp; edits</div>
+    <div class="flex gap-8 mb-12 flex-wrap">
+      ${[['live', 'Live'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([p, lab]) => `<button class="pill${period === p ? ' solid' : ''}" data-act="revenuePeriod" data-p="${p}" style="font-size:11px">${lab}</button>`).join('')}
+    </div>
+    ${!entries.length ? `
+    <div class="card" style="text-align:center;padding:28px 20px">
+      <div style="display:flex;justify-content:center;margin-bottom:12px">${iconTile(I.trend('var(--teal)', 24), { size: 56, radius: 16 })}</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">No ledger yet</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Add a sale or refund. The chart tracks net revenue up and down in real time — same idea as Stripe net volume.</div>
+      <button class="btn" data-act="addRevenue">Add sale</button>
+      <button class="btn outline" data-act="addRefund" style="margin-top:8px">Log refund</button>
+    </div>` : `
+    <div class="card mb-14" style="padding:14px 14px 10px">
+      <div class="eyebrow mb-8">Net volume · ${periodLabel}</div>
+      ${chart.html}
+    </div>
+    <div class="eyebrow mb-10">Ledger (newest first)</div>
+    <div class="list">
+      ${entries.map((e) => {
+        const when = e.createdAt ? new Date(e.createdAt).toLocaleString() : '—';
+        const amt = Number(e.amount) || 0;
+        const kind = e.kind === 'refund' || amt < 0 ? 'refund' : e.kind === 'adjustment' ? 'adj' : 'sale';
+        const kindChip = kind === 'refund'
+          ? '<span class="tagchip" style="color:var(--red);background:var(--red-tint)">refund</span>'
+          : kind === 'adj'
+            ? '<span class="tagchip grey">adj</span>'
+            : '<span class="tagchip green">sale</span>';
+        return `<button class="row" data-act="editRevenue" data-id="${esc(e.id)}" style="text-align:left">
+          <div>
+            <div style="font-size:13px;font-weight:500${amt < 0 ? ';color:var(--red)' : ''}">${amt > 0 ? '+' : ''}${money(amt)}</div>
+            <div style="font-size:11px;color:var(--muted-2);display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">${kindChip}<span>${esc(e.note || e.category || 'Entry')} · ${esc(when)}</span></div>
+          </div>
+          <span class="val">Edit ›</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <div class="grid-2" style="gap:8px;margin-top:14px">
+      <button class="btn outline" data-act="addRefund">Log refund</button>
+      <button class="btn" data-act="addRevenue">Add sale</button>
+    </div>`}
+  </div>`;
+};
+
+screens.aiOutput = () => {
+  const out = state.lastAIOutput || { title: 'Q3 Board Update', model: 'simulated', simulated: true, content: 'No output yet.', engines: [] };
+  const chips = (out.engines && out.engines.length ? out.engines : [out.model]).map((label, i) =>
+    i === 0
+      ? `<span class="pill dark" style="padding:4px 9px;font-size:11px"><span class="dot" style="background:#7FE3C8"></span>${esc(label)}</span>`
+      : `<span class="pill" style="padding:4px 9px;font-size:11px">${esc(label)}</span>`
+  ).join('<span style="font-size:11px;color:var(--muted)">+</span>');
+  return `
+  ${appbar(esc(out.title), { onSurface: true, right: `<button class="iconbtn plain" data-act="outputMenu">${I.ellipsis}</button>` })}
+  <div class="scroll" style="padding:14px 18px 16px">
+    <div class="flex items-center gap-8 flex-wrap mb-14">
+      <span style="font-size:10.5px;color:var(--muted-2)">Generated by</span>
+      ${chips}
+      ${out.engines && out.engines.length > 1 ? '<span style="font-size:10.5px;color:var(--teal);font-weight:600;margin-left:2px">· Blend</span>' : ''}
+      ${out.simulated ? '<span class="tagchip amber">Simulated</span>' : '<span class="tagchip green">Live · Ollama</span>'}
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px">${esc(out.title)}</div>
+      <div style="font-size:11px;color:var(--muted-2);margin-bottom:16px">Illuminary Peak · Prepared Jul 2026</div>
+      <div style="font-size:13px;line-height:1.6;color:var(--ink-2)">${mdToHtml(out.content)}</div>
+    </div>
+  </div>
+  <div class="flex gap-8" style="padding:11px 16px 26px;background:var(--surface);border-top:1px solid var(--line)">
+    <button class="btn" data-act="refineAI" style="flex:1;padding:12px;border-radius:11px">Refine with AI</button>
+    <button class="iconbtn plain" data-act="copyOutput" style="width:48px;border-radius:11px">${I.copy}</button>
+    <button class="iconbtn plain" data-act="exportOutput" style="width:48px;border-radius:11px">${I.download}</button>
+  </div>`;
+};
+
+screens.alerts = () => {
+  const A = state.alerts || (state.alerts = [
+    { grp: 'Today', icon: 'spark', tint: 'var(--teal-tint)', color: 'var(--teal)', title: 'Forecast beat plan', body: 'Q3 projected at $2.41M — 6.8% over plan.', time: '18m ago', unread: true },
+    { grp: 'Today', icon: 'warn', tint: 'var(--red-tint)', color: 'var(--red)', title: 'Low stock — Summit Pack 40L', body: 'Below reorder point. 6 days of cover left.', time: '1h ago', unread: true },
+    { grp: 'Today', icon: 'chat', tint: 'var(--slate-blue-tint)', color: 'var(--teal)', title: 'Meridian Retail replied', body: '"Perfect, send the PO" — AgentTech ready.', time: '2h ago', unread: false, act: 'agent' },
+    { grp: 'Earlier', icon: 'clock', tint: 'var(--amber-tint)', color: 'var(--amber)', title: 'Free plan weekly tokens', body: 'Free AI tokens reset every 7 days. Upgrade anytime for more capacity.', time: 'Yesterday', unread: false, act: 'plans' },
+  ]);
+  const groups = [...new Set(A.map((a) => a.grp))];
+  return `
+  ${appbar('Alerts', { right: `<span style="font-size:12px;font-weight:600;color:var(--teal);cursor:pointer" data-act="markRead">Mark read</span>` })}
+  <div class="scroll" style="padding:6px 18px 20px">
+    ${groups.map((g) => `
+      <div class="eyebrow" style="margin:8px 0 8px">${g}</div>
+      <div class="stack gap-10">
+        ${A.filter((a) => a.grp === g).map((a) => `
+          <div class="card ${a.act ? '' : ''}" data-act="${a.act ? 'openAlert' : ''}" data-s="${a.act || ''}" style="padding:13px 14px;display:flex;gap:12px;${a.act ? 'cursor:pointer' : ''}">
+            <div style="width:34px;height:34px;border-radius:10px;background:${a.tint};color:${a.color || 'var(--teal)'};flex-shrink:0;display:flex;align-items:center;justify-content:center">${namedIcon(a.icon, 'currentColor', 16)}</div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(a.title)}</div><div style="font-size:12px;color:var(--muted);line-height:1.4;margin-top:2px">${esc(a.body)}</div><div style="font-size:10.5px;color:var(--muted-3);margin-top:5px">${a.time}</div></div>
+            ${a.unread ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;margin-top:4px"></span>' : ''}
+          </div>`).join('')}
+      </div>`).join('')}
+  </div>`;
+};
+
+screens.settings = () => {
+  const u = state.session.user || {};
+  const acct = state.session.account || {};
+  const isGuest = u.isGuest;
+  return `
+  ${appbar('Settings')}
+  <div class="scroll" style="padding:6px 18px 20px">
+    ${isGuest ? guestBanner() : ''}
+    <button class="card mb-16" data-act="goto" data-s="profile" style="display:flex;align-items:center;gap:13px;padding:15px;width:100%;text-align:left;border:1px solid var(--line);cursor:pointer">
+      <div style="width:48px;height:48px;border-radius:14px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">${initials(u.name || 'Guest')}</div>
+      <div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(u.name || 'Guest')}</div><div style="font-size:12px;color:var(--muted-2)">${esc(u.email || 'Guest session')} · ${isGuest ? 'Guest' : 'Owner'}</div></div>
+      ${I.chevR}
+    </button>
+    <div class="eyebrow mb-8">Account</div>
+    <div class="list mb-16">
+      <button class="row" data-act="goto" data-s="profile"><span>Profile &amp; personal details</span><span class="val">›</span></button>
+      <button class="row" data-act="goto" data-s="security"><span>Privacy &amp; Security</span><span class="val">›</span></button>
+      <button class="row" data-act="download"><span>Get the app</span><span class="val">Install ›</span></button>
+      <button class="row" data-act="pickAppearance"><span>Appearance</span><span class="val">${state.settings.appearance} ›</span></button>
+      <div class="row" style="cursor:default"><span>Notifications</span><button class="toggle ${state.settings.notifications ? 'on' : ''}" data-act="toggleNotifications"></button></div>
+    </div>
+    <div class="eyebrow mb-8">Business</div>
+    <div class="list mb-16">
+      <button class="row" data-act="editBusiness"><span>Business name</span><span class="val">${esc(acct.businessName || 'Set up')} ›</span></button>
+      <button class="row" data-act="pickCurrency"><span>Currency</span><span class="val">${esc((acct.currency || 'USD') + ' ' + currency().symbol)} ›</span></button>
+      <button class="row" data-act="goto" data-s="plans"><span>Plan</span><span class="tagchip green">${state.plan}</span></button>
+    </div>
+    <div class="eyebrow mb-8">AI &amp; integrations</div>
+    <div class="list mb-16">
+      <button class="row" data-tab="ai" data-act="gotoTab"><span>AI models</span><span class="val">${state.models.active.size || 1} active ›</span></button>
+      <div class="row" style="cursor:default"><span>Blend mode</span><button class="toggle ${state.settings.blend ? 'on' : ''}" data-act="toggleSettingBlend"></button></div>
+    </div>
+    <div class="list">
+      <button class="row" data-act="logout"><span style="color:var(--red);font-weight:500">Sign out</span></button>
+    </div>
+  </div>`;
+};
+
+screens.security = () => {
+  const u = state.session.user || {};
+  const isGuest = u.isGuest;
+  return `
+  ${appbar('Privacy & Security')}
+  <div class="scroll" style="padding:6px 18px 24px">
+    <div class="eyebrow mb-8">Security</div>
+    <div class="list mb-16">
+      ${isGuest
+        ? `<div class="row" style="cursor:default"><span>Password</span><span class="val">Register to set ›</span></div>`
+        : `<button class="row" data-act="changePwd2"><span>Change password</span><span class="val">›</span></button>`}
+      <button class="row" data-act="twoFactor"><span>Two-factor authentication</span><span class="val">Off ›</span></button>
+      <button class="row" data-act="activeSessions"><span>Active sessions</span><span class="val">This device ›</span></button>
+    </div>
+    <div class="eyebrow mb-8">Privacy</div>
+    <div class="list mb-16">
+      <div class="row" style="cursor:default"><span>Discoverable by QR only</span><button class="toggle on" data-act="noop"></button></div>
+      <button class="row" data-act="myQR"><span>My StatVibe QR</span><span class="val">${esc(u.tag || '—')} ›</span></button>
+      <button class="row" data-act="exportData"><span>Export my data</span><span class="val">›</span></button>
+    </div>
+    <div class="eyebrow mb-8">Billing</div>
+    <div class="list mb-16">
+      <button class="row" data-act="paymentMethod"><span>Payment method</span><span class="val">PayMongo QR ›</span></button>
+      <button class="row" data-act="goto" data-s="plans"><span>Subscription</span><span class="val">${state.plan} ›</span></button>
+    </div>
+    <div class="list">
+      <button class="row" data-act="deleteAccount"><span style="color:var(--red);font-weight:600">Delete account</span></button>
+    </div>
+    <div style="font-size:11px;color:var(--muted-3);margin-top:14px;line-height:1.5">Your data is private. Passwords are stored only as salted hashes — never in plaintext. Other accounts can't find you unless you share your StatVibe QR. See the <b data-act="showTerms" data-tab-terms="privacy" style="color:var(--teal);cursor:pointer">Privacy Policy</b>.</div>
+  </div>`;
+};
+
+screens.profile = () => {
+  const p = state.profile;
+  const fieldRow = (label, key, type = 'text') =>
+    `<div class="field" style="margin-bottom:0;padding:11px 15px;border-bottom:1px solid var(--hairline)">
+      <label style="margin-bottom:3px">${label}</label>
+      <input class="profile-input" data-k="${key}" type="${type}" value="${esc(p[key])}" style="border:none;border-radius:0;padding:0;font-size:14px;background:none" />
+    </div>`;
+  return `
+  ${appbar('Profile', { right: `<span data-act="saveProfile" style="font-size:13px;font-weight:600;color:var(--teal);cursor:pointer;padding:0 4px">Done</span>` })}
+  <div class="scroll" style="padding:6px 18px 24px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:10px 0 22px">
+      <div style="width:76px;height:76px;border-radius:22px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:28px" id="pfAvatar">${initials(p.name)}</div>
+      <div style="text-align:center"><div style="font-size:18px;font-weight:700;letter-spacing:-.3px" id="pfName">${esc(p.name)}</div><div style="margin-top:5px"><span class="tagchip green">${esc(p.role)}</span> <span style="font-size:11.5px;color:var(--muted-2)">· ${esc(bizName())}</span></div></div>
+    </div>
+    <div class="eyebrow mb-8">Personal details</div>
+    <div class="list mb-16" style="padding:2px 0">
+      ${fieldRow('Full name', 'name')}
+      ${fieldRow('Work email', 'email', 'email')}
+      ${fieldRow('Role / title', 'role')}
+      ${fieldRow('Phone', 'phone', 'tel')}
+      <div style="padding:11px 15px"><div class="field" style="margin:0"><label style="margin-bottom:3px">Timezone</label><input class="profile-input" data-k="tz" value="${esc(p.tz)}" style="border:none;border-radius:0;padding:0;font-size:14px;background:none" /></div></div>
+    </div>
+    <div class="eyebrow mb-8">Security</div>
+    <div class="list mb-16">
+      <button class="row" data-act="changePwd"><span>Change password</span><span class="val">›</span></button>
+      <button class="row" data-act="twoFactor"><span>Two-factor authentication</span><span class="val">Off ›</span></button>
+    </div>
+    <button class="btn outline" data-act="signout" style="color:var(--red)">Sign out</button>
+  </div>`;
+};
+
+/* ---- Admin / Developer console (full access) ---- */
+screens.admin = () => {
+  const a = state.admin;
+  if (!a.authed) {
+    return `
+    ${appbar('Developer access')}
+    <div class="scroll" style="padding:20px 22px">
+      <div class="flex items-center" style="gap:12px;margin-bottom:16px">
+        <div style="width:56px;height:56px;border-radius:16px;background:var(--teal-ink);display:flex;align-items:center;justify-content:center">${I.spark('#7FE3C8', 26, true)}</div>
+        <div><div style="font-size:12px;color:var(--muted-2)">Connect as</div><div style="font-size:18px;font-weight:700;letter-spacing:-.2px">${esc(a.user || 'GenAdmin')}</div></div>
+      </div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px">Admin console</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:22px">Developer-only area with full access to system health, AI engines, feature flags, metrics and every screen. Enter the <b>${esc(a.user || 'GenAdmin')}</b> token to connect.</div>
+      <div class="field"><label>${esc(a.user || 'GenAdmin')} · Admin token</label><input id="admToken" type="password" placeholder="ADMIN_TOKEN" value="genadmin-2026" /></div>
+      <button class="btn" data-act="adminLogin" ${a.busy ? 'disabled' : ''}>${a.busy ? 'Connecting…' : 'Connect as ' + esc(a.user || 'GenAdmin')}</button>
+      <div style="font-size:11px;color:var(--muted-3);margin-top:14px;line-height:1.5">Default dev token is <b>genadmin-2026</b>. In production set <code>ADMIN_USER</code> / <code>ADMIN_TOKEN</code> in <code>.env</code> on the server.</div>
+    </div>`;
+  }
+  const s = a.summary || {};
+  const cfg = s.config || { cloudAvailable: {} };
+  const m = s.metrics || {};
+  const kv = (k, v) => `<div class="row" style="cursor:default"><span>${k}</span><span class="val mono" style="color:var(--ink)">${v}</span></div>`;
+  const cloudToggles = CLOUD.map((c) =>
+    `<div class="row" style="cursor:default"><span>${c.label} <span style="color:var(--muted-3);font-size:11px">${c.vendor}</span></span><button class="toggle ${cfg.cloudAvailable && cfg.cloudAvailable[c.id] ? 'on' : ''}" data-act="admCloud" data-id="${c.id}"></button></div>`
+  ).join('');
+  const byModel = Object.entries(m.byModel || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ') || 'none yet';
+  const engineOpts = ((state.models.engines || []).concat(state.models.cloud || [])).map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('');
+  return `
+  ${appbar('Admin console', { right: `<span data-act="adminLogout" style="font-size:12px;font-weight:600;color:var(--red);cursor:pointer;padding:0 4px">Lock</span>` })}
+  <div class="scroll" style="padding:6px 18px 24px">
+    <div class="flex items-center row-between mb-12">
+      <div class="flex items-center" style="gap:10px">
+        <div style="width:38px;height:38px;border-radius:11px;background:var(--teal-ink);color:var(--mint);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${esc(initials(s.admin_user || a.user || 'GenAdmin'))}</div>
+        <div><div class="h-page" style="font-size:18px">${esc(s.admin_user || a.user || 'GenAdmin')}</div><div class="sub">Full access · v${esc(s.version || '—')}</div></div>
+      </div>
+      <button class="pill" data-act="adminRefresh">↻ Refresh</button>
+    </div>
+    <div class="flex items-center" style="gap:7px;background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:10px;padding:9px 12px;margin-bottom:16px">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--teal)"></span>
+      <span style="font-size:12px;color:var(--teal-deep);font-weight:600">Connected as ${esc(s.admin_user || a.user || 'GenAdmin')}</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:auto">${(s.ollama && s.ollama.online) ? 'live' : 'degraded'}</span>
+    </div>
+
+    <div class="eyebrow mb-8">System</div>
+    <div class="list mb-16">
+      ${kv('Status', (s.ollama && s.ollama.online) ? 'healthy' : 'degraded (no Ollama)')}
+      ${kv('Uptime', (s.uptime_s || 0) + 's')}
+      ${kv('Node', esc(s.node || '—'))}
+      ${kv('Memory', (s.memory_mb || 0) + ' MB')}
+      ${kv('Ollama', (s.ollama && s.ollama.online) ? 'online' : 'offline')}
+      ${kv('Local models', (s.ollama && s.ollama.models || []).length)}
+    </div>
+
+    <div class="eyebrow mb-8">AI engine flags</div>
+    <div class="list mb-16">
+      <div class="row" style="cursor:default"><span>Simulate only <span style="color:var(--muted-3);font-size:11px">force simulated AI</span></span><button class="toggle ${cfg.simulateOnly ? 'on' : ''}" data-act="admSimulate"></button></div>
+      <div class="row" style="cursor:default"><span>Blend by default</span><button class="toggle ${cfg.defaultBlend ? 'on' : ''}" data-act="admBlend"></button></div>
+    </div>
+
+    <div class="eyebrow mb-8">Cloud models — flip “available”</div>
+    <div class="list mb-16">${cloudToggles}</div>
+
+    <div class="eyebrow mb-8">Metrics</div>
+    <div class="list mb-16">
+      ${kv('Requests', m.requests || 0)}
+      ${kv('AI chats', m.chats || 0)}
+      ${kv('Simulated', m.simulated || 0)}
+      ${kv('AI errors', m.aiErrors || 0)}
+      <div class="row" style="cursor:default"><span>By model</span><span class="val" style="max-width:190px;text-align:right;font-size:11px">${esc(byModel)}</span></div>
+    </div>
+
+    <div class="eyebrow mb-8">Raw AI console</div>
+    <div class="card mb-16">
+      <select id="admModel" class="mb-8" style="width:100%;font:inherit;font-size:13px;padding:9px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface)">${engineOpts}</select>
+      <textarea id="admPrompt" rows="2" placeholder="Test a prompt against the selected model…" style="width:100%;border:1px solid var(--line-2);border-radius:9px;padding:9px;font:inherit;font-size:13px;resize:none;outline:none">What is our gross margin trend?</textarea>
+      <button class="btn sm" data-act="admRunTest" style="margin-top:8px">Run test call</button>
+      ${a.testOut ? `<div style="margin-top:10px;background:var(--chip);border-radius:9px;padding:10px;font-size:12px;line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto"><div style="font-size:10px;color:var(--muted-2);margin-bottom:5px">${a.testOut.simulated ? 'SIMULATED' : 'LIVE'} · ${esc(a.testOut.model)}</div>${esc(a.testOut.content)}</div>` : ''}
+    </div>
+
+    <div class="eyebrow mb-8">Recent server log</div>
+    <div class="card mb-16" style="font-size:10.5px;line-height:1.55;color:var(--muted);max-height:150px;overflow:auto;font-family:var(--mono)">
+      ${(m.recent || []).map((l) => `<div>${esc(l)}</div>`).join('') || '<div>No log entries.</div>'}
+    </div>
+
+    <div class="eyebrow mb-8">All screens (jump)</div>
+    <div class="flex gap-8 flex-wrap mb-16">
+      ${['stats', 'calc', 'hub', 'ai', 'agent', 'revenue', 'aiOutput', 'alerts', 'plans', 'settings', 'profile', 'welcome', 'signin'].map((sc) => `<button class="pill" data-act="admJump" data-s="${sc}">${sc}</button>`).join('')}
+    </div>
+
+    <div class="grid-2">
+      <button class="btn outline" data-act="admResetConfig">Reset server config</button>
+      <button class="btn outline" data-act="admResetApp" style="color:var(--red)">Reset app state</button>
+    </div>
+  </div>`;
+};
+
+screens.plans = () => {
+  const u = state.usage;
+  const limit = u.limit || 50000;
+  const used = u.used || 0;
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  const period = u.period === 'month' ? 'month' : 'week';
+  const resetLabel = u.resetDays == null
+    ? 'no reset needed'
+    : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
+  const plans = [
+    { name: 'Free', price: '₱0', desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub' },
+    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting' },
+    { name: 'Enterprise', price: 'Custom', desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
+  ];
+  return `
+  ${appbar('Plans')}
+  <div class="scroll pad" style="padding-top:6px">
+    <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan}</div></div>
+    <div class="card mb-14">
+      <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this ${period}</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
+      <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
+      <div style="font-size:11px;color:var(--muted-2)">${used.toLocaleString()} / ${limit.toLocaleString()} AI tokens · ${resetLabel}</div>
+      ${pct >= 100 ? `<button class="btn sm mint" data-act="goto" data-s="plans" style="margin-top:12px">Upgrade to keep using AI</button>` : ''}
+    </div>
+    <div class="stack gap-10">
+      ${plans.map((p) => p.pop ? `
+        <div class="card dark" style="border:1.5px solid var(--teal);position:relative;padding:16px">
+          <span class="tagchip" style="position:absolute;top:-9px;left:16px;background:var(--teal);color:#fff">Most popular</span>
+          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:22px;font-weight:600">${p.price}</span><span style="font-size:12px;color:#9FBAB2">${p.per}</span></div></div>
+          <div style="font-size:12px;color:#C3D6D0;margin:8px 0 12px;line-height:1.55">${p.desc}</div>
+          <button class="btn mint sm" data-act="upgrade" data-p="${p.name}" style="padding:11px">${state.plan === p.name ? 'Current plan' : 'Upgrade to ' + p.name}</button>
+        </div>` : `
+        <button class="card" data-act="choosePlan" data-p="${p.name}" style="text-align:left;cursor:pointer">
+          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:17px;font-weight:600">${p.price}</span><span style="font-size:12px;color:var(--muted-2)">${p.per || ''}</span></div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5">${p.desc}</div>
+          ${state.plan === p.name ? '<div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:8px">Current plan</div>' : ''}
+        </button>`).join('')}
+    </div>
+  </div>`;
+};
