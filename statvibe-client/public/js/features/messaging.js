@@ -301,7 +301,7 @@ export function newChatSheet() {
     <div class="flex items-center gap-12" style="margin:16px 0"><div style="flex:1;height:1px;background:var(--line-2)"></div><span style="font-size:11px;color:var(--muted-3)">or enter code</span><div style="flex:1;height:1px;background:var(--line-2)"></div></div>
     <div class="field" style="margin-bottom:10px"><input id="tagInput" placeholder="SV-XXXXXX" style="text-transform:uppercase;font-family:var(--mono);letter-spacing:1px" /></div>
     <button type="button" class="btn" data-a-tag>Start chat</button>
-    <div style="text-align:center;margin-top:12px"><b data-act="myQR" style="font-size:12.5px;color:var(--teal);cursor:pointer">Show my QR so others can reach me →</b></div>`);
+    <div style="text-align:center;margin-top:12px"><button type="button" class="btn ghost" data-act="myQR" style="width:auto;padding:8px 12px;font-size:12.5px;color:var(--teal)">Show my QR so others can reach me →</button></div>`);
   setTimeout(() => {
     const sh = document.getElementById('sheet');
     if (!sh) return;

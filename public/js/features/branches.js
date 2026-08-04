@@ -217,7 +217,7 @@ export async function initBranchMap() {
       subdomains: 'abcd',
     }).addTo(mapInstance);
 
-    L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+    // Zoom +/- controls hidden — pinch / double-tap / scroll zoom still work
     pinLayer = L.layerGroup().addTo(mapInstance);
 
     mapInstance.on('click', (e) => {
