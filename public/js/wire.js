@@ -23,7 +23,7 @@ import {
 } from './features/tutorial.js';
 import { addItemSheet, predictItem, itemMenu, updateCalc } from './features/inventory.js';
 import {
-  downloadSheet, exportData, qrSheet, paymentSheet, deleteAccountConfirm,
+  downloadSheet, exportData, qrSheet, shareQRCode, paymentSheet, deleteAccountConfirm,
   editBusinessSheet, currencySheet, doUpgrade,
 } from './features/account.js';
 import { addRevenueSheet, addRefundSheet, editRevenueSheet } from './features/revenue.js';
@@ -255,6 +255,7 @@ export function bindClicks(root) {
       case 'activeSessions': toast('1 active session · this device'); break;
       case 'exportData': exportData(); break;
       case 'myQR': qrSheet(); break;
+      case 'shareQR': shareQRCode(t.dataset.tag, t.dataset.payload); break;
       case 'copyTag': navigator.clipboard && navigator.clipboard.writeText(t.dataset.tag || '').then(() => toast('Code copied')); break;
       case 'paymentMethod': paymentSheet(); break;
       case 'deleteAccount': deleteAccountConfirm(); break;
@@ -326,6 +327,19 @@ export async function runSheetAct(t) {
   if (act === 'copyTag') {
     if (navigator.clipboard) await navigator.clipboard.writeText(t.dataset.tag || '');
     toast('Code copied');
+    return;
+  }
+  if (act === 'myQR') {
+    qrSheet();
+    return;
+  }
+  if (act === 'shareQR') {
+    await shareQRCode(t.dataset.tag, t.dataset.payload);
+    return;
+  }
+  if (act === 'newChat') {
+    newChatSheet();
+    return;
   }
 }
 

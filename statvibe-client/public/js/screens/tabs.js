@@ -347,33 +347,54 @@ tabScreens.ai = () => {
 
 tabScreens.agent = () => {
   const convs = state.session.conversations || [];
+  const auto = state.session.agentAutoReply;
   const row = (c) => {
     const preview = (c.mine ? 'You: ' : '') + (c.lastText || 'Say hello');
     const unread = c.unread > 0;
+    const recent = c.lastAt && (Date.now() - Number(c.lastAt) < 15 * 60 * 1000);
+    const status = unread ? 'active' : (auto ? 'agent' : (recent ? 'online' : 'away'));
+    const statusLabel = status === 'online' ? 'Online' : status === 'agent' ? 'Agent' : status === 'active' ? 'Active' : 'Away';
     return `
-    <button class="conv-row" data-act="openChat" data-id="${c.id}">
-      ${convAvatar(c.other)}
-      <div style="flex:1;min-width:0">
-        <div class="row-between"><span style="font-size:15px;font-weight:${unread ? '700' : '600'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.other.name)}</span><span style="font-size:11.5px;color:${unread ? 'var(--teal)' : 'var(--muted-2)'};flex-shrink:0;margin-left:8px;font-weight:${unread ? '600' : '400'}">${relTime(c.lastAt)}</span></div>
-        <div class="row-between" style="margin-top:2px"><span style="font-size:13px;color:${unread ? 'var(--ink)' : 'var(--muted-2)'};font-weight:${unread ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(preview)}</span>${unread ? `<span class="conv-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}</div>
+    <button type="button" class="msg-row" data-act="openChat" data-id="${esc(c.id)}">
+      <div class="msg-avatar-wrap">
+        ${convAvatar(c.other, 48)}
+        <span class="msg-status-dot ${status}" title="${statusLabel}"></span>
+      </div>
+      <div class="msg-row-body">
+        <div class="msg-row-top">
+          <span class="msg-row-name${unread ? ' is-unread' : ''}">${esc(c.other.name)}</span>
+          <span class="msg-row-time${unread ? ' is-unread' : ''}">${esc(relTime(c.lastAt))}</span>
+        </div>
+        <div class="msg-row-bottom">
+          <span class="msg-row-preview${unread ? ' is-unread' : ''}">${esc(preview)}</span>
+          <span class="msg-row-meta">
+            <span class="msg-status-pill ${status}">${statusLabel}</span>
+            ${unread ? `<span class="msg-unread">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
+          </span>
+        </div>
       </div>
     </button>`;
   };
   return `
-  <div class="scroll pad" style="padding-top:54px">
-    <div class="row-between mb-14">
-      <div class="h-page">Messages</div>
-      <button class="iconbtn accent" data-act="newChat" title="New message">${I.plus('#fff')}</button>
+  <div class="msg-shell">
+    <div class="msg-list-header">
+      <div>
+        <div class="h-page" style="margin:0">Messages</div>
+        <div class="sub" style="margin:2px 0 0">${convs.length} chat${convs.length === 1 ? '' : 's'} · AgentTech ${auto ? 'auto-reply' : 'approval'}</div>
+      </div>
+      <button type="button" class="iconbtn accent" data-act="newChat" title="New message">${I.plus('#fff')}</button>
     </div>
-    ${convs.length
-      ? `<div class="stack" style="gap:2px">${convs.map(row).join('')}</div>`
-      : `<div class="card" style="text-align:center;padding:30px 20px;margin-top:20px">
-          <div style="display:flex;justify-content:center;margin:0 auto 14px">${iconTile(I.chat('var(--teal)', 26), { size: 64, radius: 20 })}</div>
-          <div style="font-size:16px;font-weight:700;margin-bottom:6px">No messages yet</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:18px">Messages appear when someone scans your StatVibe QR. Share your code, or start one by scanning theirs.</div>
-          <button class="btn" data-act="newChat" style="margin-bottom:10px">Start a message</button>
-          <button class="btn outline" data-act="myQR">Show my QR code</button>
-        </div>`}
+    <div class="msg-list-scroll">
+      ${convs.length
+        ? `<div class="msg-list">${convs.map(row).join('')}</div>`
+        : `<div class="msg-empty card">
+            <div style="display:flex;justify-content:center;margin:0 auto 14px">${iconTile(I.chat('var(--teal)', 26), { size: 64, radius: 20 })}</div>
+            <div style="font-size:16px;font-weight:700;margin-bottom:6px">No messages yet</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:18px">Messages appear when someone scans your StatVibe QR. Share your code, or start one by scanning theirs.</div>
+            <button type="button" class="btn" data-act="newChat" style="margin-bottom:10px">Start a message</button>
+            <button type="button" class="btn outline" data-act="myQR">Show my QR code</button>
+          </div>`}
+    </div>
   </div>
   ${tabbar('agent')}`;
 };
@@ -386,15 +407,16 @@ screens.chat = () => {
   const msgs = mergeMessagesUnique(t.messages || []);
   const bubbles = msgs.map((m) => {
     const id = esc(m.id || '');
+    const time = m.at ? new Date(m.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase() : '';
     if (m.from === me) {
-      return `<div class="bubble me${m.pending ? ' is-pending' : ''}" data-msg-id="${id}">${esc(m.text)}</div>`;
+      return `<div class="bubble me${m.pending ? ' is-pending' : ''}" data-msg-id="${id}"><div class="bubble-text">${esc(m.text)}</div>${time ? `<div class="bubble-meta">${esc(time)}${m.pending ? ' · sending' : ''}</div>` : ''}</div>`;
     }
-    return `<div class="bubble them" data-msg-id="${id}">${esc(m.text)}</div>`;
+    return `<div class="bubble them" data-msg-id="${id}"><div class="bubble-text">${esc(m.text)}</div>${time ? `<div class="bubble-meta">${esc(time)}</div>` : ''}</div>`;
   }).join('');
   const drafting = t.drafting
     ? `<div class="bubble ai draft-card is-drafting" data-msg-id="drafting">
-        <div class="ai-tag">${I.spark('#7FE3C8', 13, true)} AgentTech drafting</div>
-        <div class="typing" style="color:#7FE3C8"><i></i><i></i><i></i></div>
+        <div class="ai-tag">${I.spark('#A78BFA', 13, true)} <span class="draft-status">AgentTech drafting</span></div>
+        <div class="typing" style="color:#A78BFA"><i></i><i></i><i></i></div>
       </div>`
     : '';
   const draftCard = t.draft
@@ -408,23 +430,28 @@ screens.chat = () => {
       </div>`
     : '';
   const empty = !msgs.length && !t.draft && !t.drafting
-    ? `<div class="chat-empty"><div style="font-size:13px;line-height:1.5">This is the start of your conversation with <b style="color:var(--ink)">${esc(other.name)}</b>.</div></div>`
+    ? `<div class="chat-empty"><div style="font-size:13px;line-height:1.5">This is the start of your conversation with <b style="color:var(--ink)">${esc(other.name)}</b>. Say hello or tap AI to draft an opener.</div></div>`
     : '';
   return `
-  <div class="flex items-center" style="gap:11px;padding:54px 12px 12px;background:var(--surface);border-bottom:1px solid var(--line)">
-    <button class="iconbtn plain" data-act="logicalBack" style="background:none" title="Back" aria-label="Back">${I.back}</button>
-    ${convAvatar(other, 36)}
-    <div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(other.name)}</div><div style="font-size:11px;color:var(--teal)"><span style="width:6px;height:6px;border-radius:50%;background:${auto ? 'var(--teal)' : 'var(--amber)'};display:inline-block;margin-right:5px"></span>AgentTech · ${auto ? 'auto-reply' : 'approval'}</div></div>
-    <button class="iconbtn plain" data-act="agentSettings" title="AgentTech settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z" stroke="currentColor" stroke-width="1.4"/></svg></button>
-  </div>
-  <div class="chat-scroll" id="chatScroll">
-    ${empty}${bubbles}${drafting}${draftCard}
-  </div>
-  <div class="composer">
-    <div class="inputwrap">
-      <input id="agentInput" placeholder="Message…" autocomplete="off" />
-      <button class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('var(--teal)', 12, true)} AI</button>
-      <button class="send" data-act="agentSend">${I.send}</button>
+  <div class="chat-screen">
+    <div class="chat-header">
+      <button type="button" class="iconbtn plain" data-act="logicalBack" title="Back" aria-label="Back">${I.back}</button>
+      <div class="msg-avatar-wrap sm">${convAvatar(other, 38)}<span class="msg-status-dot ${auto ? 'agent' : 'online'}"></span></div>
+      <div class="chat-header-copy">
+        <div class="chat-header-name">${esc(other.name)}</div>
+        <div class="chat-header-sub"><span class="msg-status-dot inline ${auto ? 'agent' : 'online'}"></span>AgentTech · ${auto ? 'auto-reply' : 'approval'}</div>
+      </div>
+      <button type="button" class="iconbtn plain" data-act="agentSettings" title="AgentTech settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z" stroke="currentColor" stroke-width="1.4"/></svg></button>
+    </div>
+    <div class="chat-scroll" id="chatScroll">
+      ${empty}${bubbles}${drafting}${draftCard}
+    </div>
+    <div class="composer">
+      <div class="inputwrap">
+        <input id="agentInput" placeholder="Message…" autocomplete="off" />
+        <button type="button" class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('var(--teal)', 12, true)} AI</button>
+        <button type="button" class="send" data-act="agentSend">${I.send}</button>
+      </div>
     </div>
   </div>`;
 };
@@ -436,7 +463,6 @@ function mergeMessagesUnique(list) {
     const id = m.id || `${m.from}:${m.at}:${String(m.text || '').slice(0, 20)}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    // Collapse near-duplicates of same text from same sender
     const prev = out[out.length - 1];
     if (
       prev

@@ -152,15 +152,49 @@ window.QR = QR; // exposed for QR round-trip testing
 export function qrSheet() {
   const u = state.session.user || {};
   const tag = u.tag || '';
-  openSheet(`<h3>My StatVibe code</h3>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 14px">Share this code (or QR) so a partner or client can reach you in Agent → New message. Nobody can find you unless you share it.</div>
-    <div style="text-align:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px">
-      ${qrPlaceholder('statvibe:' + (tag || 'guest'), 168)}
-      <div style="font-family:var(--mono);font-size:22px;font-weight:600;margin-top:14px;letter-spacing:2px;color:#14171C">${esc(tag || '—')}</div>
-      <div style="font-size:11px;color:#8A9099;margin-top:3px">Your StatVibe code${u.email ? ' · ' + esc(u.email) : ''}</div>
+  const payload = 'statvibe:' + (tag || 'guest');
+  const qrSvg = (QR && QR.svg) ? QR.svg(payload, 200) : qrPlaceholder(payload, 200);
+  openSheet(`<div class="sheet-back-row">
+      <button type="button" class="sheet-back-btn" data-close aria-label="Close">✕ Close</button>
+      <h3 style="margin:0;flex:1;text-align:center;padding-right:56px">My QR Code</h3>
     </div>
-    <button class="btn" data-act="copyTag" data-tag="${esc(tag)}" style="margin-top:12px">Copy my code</button>
-    <button class="btn outline" data-close style="margin-top:8px">Done</button>`);
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:4px 0 14px">Share this code (or QR) so a partner or client can reach you in Agent → New message. Nobody can find you unless you share it.</div>
+    <div class="my-qr-card">
+      <div class="my-qr-frame">${qrSvg}</div>
+      <div class="my-qr-code">${esc(tag || '—')}</div>
+      <div class="my-qr-sub">Your StatVibe code${u.email ? ' · ' + esc(u.email) : ''}</div>
+    </div>
+    <div class="grid-2" style="gap:8px;margin-top:12px">
+      <button type="button" class="btn outline" data-act="copyTag" data-tag="${esc(tag)}">Copy code</button>
+      <button type="button" class="btn" data-act="shareQR" data-tag="${esc(tag)}" data-payload="${esc(payload)}">Share QR</button>
+    </div>
+    <button type="button" class="btn ghost" data-close style="margin-top:8px">Done</button>`);
+}
+
+export async function shareQRCode(tag, payload) {
+  const code = tag || '';
+  const text = payload || ('statvibe:' + (code || 'guest'));
+  const shareData = {
+    title: 'My StatVibe code',
+    text: 'Add me on StatVibe · ' + (code || text),
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      toast('Shared');
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(code || text);
+      toast('Code copied');
+      return;
+    }
+  } catch { /* fall through */ }
+  toast(code ? ('Your code: ' + code) : 'Sharing unavailable');
 }
 export async function paymentSheet() {
   const u = state.session.user || {};
