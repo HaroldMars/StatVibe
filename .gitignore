@@ -4,6 +4,11 @@ data/
 *.log
 .DS_Store
 .env
+.env.*
+!.env.example
+!**/.env.example
 npm-debug.log*
 .vercel
-.env*
+landing/.next/
+landing/node_modules/
+landing/out/
