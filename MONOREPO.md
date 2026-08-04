@@ -59,6 +59,27 @@ All `/api/*` traffic is forwarded to the shared `requestHandler` in `server.js`.
 - **Client** — static build → `dist`, SPA fallback to `index.html`.
 - **Landing** — Next.js framework defaults.
 
+## Cutover — three separate Vercel projects
+
+Hobby can attach up to **3 projects** to one GitHub repo. Create them like this:
+
+1. Vercel → **Add New → Project** → import `HaroldMars/StatVibe`
+2. Click **Edit** next to Root Directory and pick one folder:
+   - `statvibe-server` → project name `statvibe-server`
+   - `statvibe-client` → project name `stat-vibe` (keeps https://stat-vibe.vercel.app)
+   - `statvibe-landing` → project name `statvibe-landing`
+3. Set env vars from each package’s `.env.example`, then Deploy.
+4. Repeat for the other two folders.
+
+Or one-shot with a token:
+
+```bash
+export VERCEL_TOKEN=...   # https://vercel.com/account/tokens
+node scripts/deploy-three-projects.mjs
+```
+
+GitHub Actions: **Actions → Deploy StatVibe three projects → Run workflow** (type `deploy`). Requires secret `VERCEL_TOKEN`.
+
 ## Local
 
 ```bash

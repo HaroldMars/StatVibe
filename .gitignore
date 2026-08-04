@@ -18,3 +18,4 @@ statvibe-client/node_modules/
 statvibe-client/dist/
 statvibe-server/node_modules/
 statvibe-server/data/
+.tools/
