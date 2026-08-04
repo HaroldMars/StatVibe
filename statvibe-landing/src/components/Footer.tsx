@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getClientBase } from '@/lib/urls';
+import { BrandLogo } from '@/components/BrandLogo';
 
 type StatusState = 'checking' | 'online' | 'degraded';
 
@@ -39,8 +40,8 @@ export function Footer() {
     <footer className="border-t border-leaf-800/10 bg-cream/80">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="font-display text-lg font-semibold text-leaf-950">StatVibe</p>
-          <p className="mt-1 max-w-xs text-sm text-moss-500">
+          <BrandLogo size={28} />
+          <p className="mt-3 max-w-xs text-sm text-moss-500">
             A project of Illuminary Peak Company. Analytics with a pulse.
           </p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-leaf-800/10 bg-white/70 px-3 py-1.5 text-xs text-moss-500">

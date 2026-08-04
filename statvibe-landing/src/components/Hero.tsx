@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useDeviceRedirect } from '@/hooks/useDeviceRedirect';
@@ -29,14 +30,24 @@ export function Hero() {
           Now live for growing teams
         </motion.p>
 
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.05 }}
-          className="font-display text-5xl font-semibold tracking-tight text-leaf-950 sm:text-6xl md:text-7xl lg:text-[5.25rem] lg:leading-[0.95]"
+          className="flex items-center gap-4 sm:gap-5"
         >
-          StatVibe
-        </motion.p>
+          <Image
+            src="/logo-main.png"
+            alt="StatVibe logo"
+            width={96}
+            height={96}
+            priority
+            className="h-16 w-16 rounded-2xl shadow-lift sm:h-20 sm:w-20 md:h-24 md:w-24"
+          />
+          <p className="font-display text-5xl font-semibold tracking-tight text-leaf-950 sm:text-6xl md:text-7xl lg:text-[5.25rem] lg:leading-[0.95]">
+            StatVibe
+          </p>
+        </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 16 }}
