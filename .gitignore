@@ -7,3 +7,6 @@ data/
 npm-debug.log*
 .vercel
 .env*
+landing/.next/
+landing/node_modules/
+landing/out/

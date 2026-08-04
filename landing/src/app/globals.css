@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-start: #f3f4fd;
+  --bg-end: #ffffff;
+  --ink: #18213f;
+  --ink-2: #2f3c66;
+  --muted: #6b7599;
+  --primary: #5b67fa;
+  --primary-deep: #3e4dd8;
+  --primary-tint: #eef0ff;
+  --line: #dfe4ff;
+  --surface: rgba(255, 255, 255, 0.72);
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 42%, #f8f9ff 100%);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #dfe4ff;
+  color: var(--ink);
+}
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(223, 228, 255, 0.9);
+  box-shadow: 0 10px 40px rgba(24, 33, 63, 0.06);
+}
+
+/* Leaflet container — attribution clipped by outer overflow wrapper */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #e8ebff;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(24, 33, 63, 0.12);
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
