@@ -1,5 +1,7 @@
 # StatVibe
 
+> **Multi-project layout:** see [`MONOREPO.md`](./MONOREPO.md) for `statvibe-server` / `statvibe-client` / `statvibe-landing` Vercel Root Directories.
+
 A worldwide-class business application — run the whole business from one screen.
 Real-time analytics, a business calculator, an idea & project hub, a multi-model AI
 workspace, and the **AgentTech** client-messaging assistant. Built for teams of any

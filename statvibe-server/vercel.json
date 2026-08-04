@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["server.js", "lib/**", "node_modules/mongodb/**", "node_modules/express/**", "node_modules/cors/**"]
+      }
+    }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ]
+}

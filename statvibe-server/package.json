@@ -1,0 +1,19 @@
+{
+  "name": "statvibe-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StatVibe backend API — auth, durable store, AI, REST. Deploy as Vercel project Root Directory: statvibe-server",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "NODE_ENV=production node server.js",
+    "dev": "node server.js",
+    "dev:express": "node express-app.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mongodb": "^6.21.0"
+  }
+}

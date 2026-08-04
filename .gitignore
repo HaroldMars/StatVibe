@@ -12,3 +12,9 @@ npm-debug.log*
 landing/.next/
 landing/node_modules/
 landing/out/
+statvibe-landing/.next/
+statvibe-landing/node_modules/
+statvibe-client/node_modules/
+statvibe-client/dist/
+statvibe-server/node_modules/
+statvibe-server/data/
