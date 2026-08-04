@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="StatVibe logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7b87ff"/>
+      <stop offset="1" stop-color="#5865f2"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#bg)"/>
+  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".25"/>
+  <path d="M56.5 27.5c-3.8-2.2-8.2-3.5-13-3.5-8.8 0-14.5 4.8-14.5 12 0 7.8 5.5 10.2 14 12.8 7 2.1 9.5 4 9.5 7.7 0 4.2-3.6 7-9.5 7-5 0-9.5-1.8-13-5l-4.5 6.5c4.5 4 10.5 6.2 17 6.2 10.2 0 16.5-5.5 16.5-13.5 0-8-5.5-10.8-14.5-13.2-6.5-1.8-9-3.5-9-7 0-3.8 3.2-6 8-6 4 0 7.5 1.2 10.5 3.5l2.5-7.5z" fill="#fff"/>
+</svg>

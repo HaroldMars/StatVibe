@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useDeviceRedirect } from '@/hooks/useDeviceRedirect';
+import { BrandLogo } from '@/components/BrandLogo';
 
 export function Navbar() {
   const { openLaunch, openGetStarted, ready } = useDeviceRedirect();
@@ -11,13 +12,8 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-leaf-800/10 bg-cream/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <a href="#top" className="group flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-leaf-400/50 ring-1 ring-leaf-800/15">
-            <span className="h-2.5 w-2.5 rounded-full bg-leaf-600" />
-          </span>
-          <span className="font-display text-xl font-semibold tracking-tight text-leaf-950">
-            StatVibe
-          </span>
+        <a href="#top" className="group">
+          <BrandLogo size={32} priority />
         </a>
 
         <nav className="hidden items-center gap-8 text-sm text-moss-500 md:flex">
