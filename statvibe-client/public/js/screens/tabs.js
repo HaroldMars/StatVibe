@@ -383,27 +383,68 @@ screens.chat = () => {
   const other = t.other || { name: 'Chat', tag: '' };
   const me = state.session.user && state.session.user.id;
   const auto = state.session.agentAutoReply;
-  const bubbles = (t.messages || []).map((m) => m.from === me
-    ? `<div class="bubble me">${esc(m.text)}</div>`
-    : `<div class="bubble them">${esc(m.text)}</div>`).join('');
-  const draftControls = t.draft
-    ? `<div class="approve-row"><button class="pill" data-act="approveSend" style="color:var(--teal);background:var(--teal-tint);border-color:var(--teal-tint-border)">Approve &amp; send</button><button class="pill" data-act="editDraft">Edit</button></div>`
+  const msgs = mergeMessagesUnique(t.messages || []);
+  const bubbles = msgs.map((m) => {
+    const id = esc(m.id || '');
+    if (m.from === me) {
+      return `<div class="bubble me${m.pending ? ' is-pending' : ''}" data-msg-id="${id}">${esc(m.text)}</div>`;
+    }
+    return `<div class="bubble them" data-msg-id="${id}">${esc(m.text)}</div>`;
+  }).join('');
+  const drafting = t.drafting
+    ? `<div class="bubble ai draft-card is-drafting" data-msg-id="drafting">
+        <div class="ai-tag">${I.spark('#7FE3C8', 13, true)} AgentTech drafting</div>
+        <div class="typing" style="color:#7FE3C8"><i></i><i></i><i></i></div>
+      </div>`
+    : '';
+  const draftCard = t.draft
+    ? `<div class="bubble ai draft-card" data-msg-id="draft">
+        <div class="ai-tag"><span class="draft-status">AI Suggested Draft</span></div>
+        <div class="draft-body">${esc(t.draft)}</div>
+        <div class="draft-actions">
+          <button type="button" class="pill solid" data-act="approveSend">Approve &amp; send</button>
+          <button type="button" class="pill" data-act="editDraft">Edit</button>
+        </div>
+      </div>`
+    : '';
+  const empty = !msgs.length && !t.draft && !t.drafting
+    ? `<div class="chat-empty"><div style="font-size:13px;line-height:1.5">This is the start of your conversation with <b style="color:var(--ink)">${esc(other.name)}</b>.</div></div>`
     : '';
   return `
   <div class="flex items-center" style="gap:11px;padding:54px 12px 12px;background:var(--surface);border-bottom:1px solid var(--line)">
-    <button class="iconbtn plain" data-act="back" style="background:none">${I.back}</button>
+    <button class="iconbtn plain" data-act="logicalBack" style="background:none" title="Back" aria-label="Back">${I.back}</button>
     ${convAvatar(other, 36)}
     <div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(other.name)}</div><div style="font-size:11px;color:var(--teal)"><span style="width:6px;height:6px;border-radius:50%;background:${auto ? 'var(--teal)' : 'var(--amber)'};display:inline-block;margin-right:5px"></span>AgentTech · ${auto ? 'auto-reply' : 'approval'}</div></div>
     <button class="iconbtn plain" data-act="agentSettings" title="AgentTech settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z" stroke="currentColor" stroke-width="1.4"/></svg></button>
   </div>
   <div class="chat-scroll" id="chatScroll">
-    ${(t.messages || []).length ? bubbles + draftControls : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 24px;color:var(--muted-2)"><div style="font-size:13px;line-height:1.5">This is the start of your conversation with <b style="color:var(--ink)">${esc(other.name)}</b>.</div></div>`}
+    ${empty}${bubbles}${drafting}${draftCard}
   </div>
   <div class="composer">
     <div class="inputwrap">
-      <input id="agentInput" placeholder="Message…" />
+      <input id="agentInput" placeholder="Message…" autocomplete="off" />
       <button class="pill" data-act="agentDraft" style="padding:6px 11px;background:var(--surface)">${I.spark('var(--teal)', 12, true)} AI</button>
       <button class="send" data-act="agentSend">${I.send}</button>
     </div>
   </div>`;
 };
+
+function mergeMessagesUnique(list) {
+  const seen = new Set();
+  const out = [];
+  for (const m of list || []) {
+    const id = m.id || `${m.from}:${m.at}:${String(m.text || '').slice(0, 20)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    // Collapse near-duplicates of same text from same sender
+    const prev = out[out.length - 1];
+    if (
+      prev
+      && prev.from === m.from
+      && String(prev.text || '').trim() === String(m.text || '').trim()
+      && Math.abs((prev.at || 0) - (m.at || 0)) < 4000
+    ) continue;
+    out.push(m);
+  }
+  return out;
+}

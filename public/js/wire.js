@@ -9,6 +9,7 @@ import { runWorkspace, titleFor, toggleEngine, loadModels, openModelPicker, setA
 import { editIdea, newIdea, aivibe, aiHistorySheet } from './features/ideas.js';
 import {
   openChat, newChatSheet, agentDraft, agentSend, approveSend, editDraft, agentSettingsSheet,
+  stopQRScanner,
 } from './features/messaging.js';
 import {
   adminLogin, adminLogout, adminRefresh, adminSetConfig, adminRunTest, adminJump,
@@ -48,6 +49,7 @@ export function bindClicks(root) {
       tutorialSkip();
       return true;
     }
+    stopQRScanner();
     onMapSheetDismissed();
     return false;
   });
@@ -350,15 +352,37 @@ export function wireScreen(root) {
     });
   });
 
-  // agent enter-to-send
+  // agent enter-to-send (bind once per element lifetime)
   const ai = $('#agentInput');
-  if (ai) ai.addEventListener('keydown', (e) => { if (e.key === 'Enter') agentSend(); });
+  if (ai && !ai._svKeyBound) {
+    ai._svKeyBound = true;
+    ai.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        agentSend();
+      }
+    });
+  }
   const ap = $('#aiPrompt');
-  if (ap) ap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { const p = ap.value.trim(); if (p) runWorkspace(p, titleFor(p)); } });
+  if (ap && !ap._svKeyBound) {
+    ap._svKeyBound = true;
+    ap.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        const p = ap.value.trim();
+        if (p) runWorkspace(p, titleFor(p));
+      }
+    });
+  }
 
   // Auth forms — Enter submits like Google / Instagram / banking apps.
   const loginForm = root.querySelector('#loginForm');
-  if (loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+  if (loginForm && !loginForm._svBound) {
+    loginForm._svBound = true;
+    loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+  }
   const registerForm = root.querySelector('#registerForm');
-  if (registerForm) registerForm.addEventListener('submit', (e) => { e.preventDefault(); doRegister(); });
+  if (registerForm && !registerForm._svBound) {
+    registerForm._svBound = true;
+    registerForm.addEventListener('submit', (e) => { e.preventDefault(); doRegister(); });
+  }
 }

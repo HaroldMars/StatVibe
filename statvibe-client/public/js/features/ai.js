@@ -169,10 +169,21 @@ export function toggleEngine(id) {
 }
 
 const MODEL_CATALOG = [
-  { id: 'auto', label: 'Auto (Recommended)', desc: 'Smart routing picks the best available model', badge: 'Recommended', group: 'top' },
-  { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', desc: 'Fast & efficient for everyday tasks', badge: 'Fast', group: 'gemini' },
-  { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', desc: 'Balanced speed and quality', badge: 'Balanced', group: 'gemini' },
-  { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: 'High performance for complex analysis', badge: 'Pro', group: 'gemini' },
+  { id: 'auto', label: 'Auto (Recommended)', desc: 'Smart routing picks the best available model', badge: 'Recommended', group: 'available', available: true },
+  { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', desc: 'Fast & efficient for everyday tasks', badge: 'Fast', group: 'available', available: true },
+  { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', desc: 'Balanced speed and quality', badge: 'Balanced', group: 'available', available: true },
+  { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: 'High performance for complex analysis', badge: 'Pro', group: 'available', available: true },
+];
+
+const COMING_SOON_MODELS = [
+  { id: 'opus-5', label: 'Opus 5', desc: 'Frontier reasoning · private testing', badge: 'Beta', group: 'soon' },
+  { id: 'opus-4.8', label: 'Opus 4.8', desc: 'Advanced agent workflows', badge: 'Soon', group: 'soon' },
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', desc: 'Long-context business analysis', badge: 'Soon', group: 'soon' },
+  { id: 'fable-5', label: 'Fable 5', desc: 'Narrative & creative drafting', badge: 'Beta', group: 'soon' },
+  { id: 'sonnet-4.6', label: 'Sonnet 4.6', desc: 'Balanced coding & writing', badge: 'Soon', group: 'soon' },
+  { id: 'opus-4.7', label: 'Opus 4.7', desc: 'Deep multi-step planning', badge: 'Soon', group: 'soon' },
+  { id: 'kimi-k3', label: 'Kimi K3', desc: 'Long-context research', badge: 'Beta', group: 'soon' },
+  { id: 'sonnet-5', label: 'Sonnet 5', desc: 'Next-gen balanced model', badge: 'Soon', group: 'soon' },
 ];
 
 export function workspaceModelOptions() {
@@ -181,11 +192,10 @@ export function workspaceModelOptions() {
   for (const m of MODEL_CATALOG) {
     if (seen.has(m.id)) continue;
     seen.add(m.id);
-    out.push(m);
+    out.push({ ...m, available: true });
   }
   for (const e of [...(state.models.workspace || []), ...state.models.engines]) {
     if (!e || !e.id || seen.has(e.id)) continue;
-    // Skip raw API slugs like openrouter/auto — covered by Auto
     if (String(e.id).toLowerCase() === 'openrouter/auto') continue;
     seen.add(e.id);
     out.push({
@@ -193,10 +203,15 @@ export function workspaceModelOptions() {
       label: e.label || e.id,
       desc: e.vendor || 'Available model',
       badge: e.kind === 'hosted' ? 'Hosted' : (e.kind === 'local' ? 'Local' : ''),
-      group: 'other',
+      group: 'available',
+      available: true,
     });
   }
   return out;
+}
+
+export function comingSoonModels() {
+  return COMING_SOON_MODELS.map((m) => ({ ...m, available: false }));
 }
 
 export function activeModelMeta() {
@@ -211,6 +226,10 @@ export function activeModelMeta() {
 /** Apply model without full-page re-render (fixes select refresh loop). */
 export function setActiveModel(id, { toastLabel } = {}) {
   if (!id) return;
+  if (COMING_SOON_MODELS.some((m) => m.id === id)) {
+    toast('Model currently in private testing. Switch to an active model or request beta access.');
+    return;
+  }
   if (id === 'auto') {
     state.models.blend = true;
     state.settings.blend = true;
@@ -239,27 +258,38 @@ export function setActiveModel(id, { toastLabel } = {}) {
   toast('Model → ' + label);
 }
 
+function modelOptionHtml(o, isSelected) {
+  const disabled = o.available === false;
+  return `<button type="button" class="ai-model-option${isSelected ? ' is-selected' : ''}${disabled ? ' is-soon' : ''}" data-id="${esc(o.id)}" data-soon="${disabled ? '1' : '0'}" ${disabled ? 'aria-disabled="true"' : ''}>
+    <div class="ai-model-option-copy">
+      <div class="ai-model-option-title">${esc(o.label)}${o.badge ? `<span class="ai-model-badge${disabled ? ' soon' : ''}">${esc(o.badge)}</span>` : ''}</div>
+      <div class="ai-model-option-desc">${esc(o.desc || '')}</div>
+    </div>
+    <span class="ai-model-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+  </button>`;
+}
+
 export function openModelPicker() {
   const activeId = (state.models.active.size && [...state.models.active][0]) || '';
   const blendOn = !!state.models.blend;
   const options = workspaceModelOptions();
+  const soon = comingSoonModels();
 
   openSheet(`<div class="sheet-back-row">
       <button type="button" class="sheet-back-btn" id="sheetLogicalBack">← Back</button>
       <h3 style="margin:0;flex:1;text-align:center;padding-right:56px">Choose model</h3>
     </div>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin:4px 0 14px">Pick how StatVibe routes AI Workspace tasks. Selection updates instantly — no page refresh.</div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin:4px 0 12px">Pick how StatVibe routes AI Workspace tasks. Selection updates instantly — no page refresh.</div>
+    <div class="ai-model-section-label">Available</div>
     <div class="ai-model-list">
       ${options.map((o) => {
         const isSelected = o.id === 'auto' ? blendOn : (!blendOn && o.id === activeId);
-        return `<button type="button" class="ai-model-option${isSelected ? ' is-selected' : ''}" data-id="${esc(o.id)}">
-          <div class="ai-model-option-copy">
-            <div class="ai-model-option-title">${esc(o.label)}${o.badge ? `<span class="ai-model-badge">${esc(o.badge)}</span>` : ''}</div>
-            <div class="ai-model-option-desc">${esc(o.desc || '')}</div>
-          </div>
-          <span class="ai-model-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
-        </button>`;
+        return modelOptionHtml(o, isSelected);
       }).join('')}
+    </div>
+    <div class="ai-model-section-label" style="margin-top:16px">Coming soon / Beta</div>
+    <div class="ai-model-list">
+      ${soon.map((o) => modelOptionHtml(o, false)).join('')}
     </div>`);
 
   setTimeout(() => {
@@ -267,6 +297,10 @@ export function openModelPicker() {
     if (back) back.onclick = () => closeSheet();
     document.querySelectorAll('.ai-model-option').forEach((row) => {
       row.onclick = () => {
+        if (row.dataset.soon === '1') {
+          toast('Model currently in private testing. Switch to an active model or request beta access.');
+          return;
+        }
         setActiveModel(row.dataset.id);
         closeSheet();
       };
