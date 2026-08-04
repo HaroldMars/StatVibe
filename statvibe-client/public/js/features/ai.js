@@ -18,12 +18,23 @@ export async function loadModels() {
     // Drop any active model that no longer exists (e.g. a cloud model disabled by admin).
     // Workspace Gemini options stay selectable even when they remap to hosted AI_MODEL.
     const valid = new Set([
+      'auto',
       ...(state.models.workspace || []),
       ...state.models.engines,
       ...state.models.cloud.filter((c) => c.available),
-    ].map((e) => e.id));
-    state.models.active.forEach((id) => { if (!valid.has(id)) state.models.active.delete(id); });
+      { id: 'google/gemini-2.5-flash-lite' },
+      { id: 'google/gemini-3.5-flash-lite' },
+      { id: 'google/gemini-3.6-flash' },
+    ].map((e) => (typeof e === 'string' ? e : e.id)));
+    // Don't wipe selection just because workspace catalog id isn't in engines —
+    // hosted chat remaps unknown ids server-side.
+    const engineIds = new Set(state.models.engines.map((e) => e.id));
     if (state.models.active.size === 0) {
+      const first = (state.models.workspace && state.models.workspace[0]) || state.models.engines[0];
+      if (first) state.models.active.add(first.id);
+    } else if ([...state.models.active].every((id) => !valid.has(id) && !engineIds.has(id))) {
+      // Only clear truly unknown ids
+      state.models.active.clear();
       const first = (state.models.workspace && state.models.workspace[0]) || state.models.engines[0];
       if (first) state.models.active.add(first.id);
     }
@@ -155,4 +166,110 @@ export function toggleEngine(id) {
   if (a.has(id)) { if (a.size > 1) a.delete(id); else toast('Keep at least one model active'); }
   else a.add(id);
   render();
+}
+
+const MODEL_CATALOG = [
+  { id: 'auto', label: 'Auto (Recommended)', desc: 'Smart routing picks the best available model', badge: 'Recommended', group: 'top' },
+  { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', desc: 'Fast & efficient for everyday tasks', badge: 'Fast', group: 'gemini' },
+  { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', desc: 'Balanced speed and quality', badge: 'Balanced', group: 'gemini' },
+  { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: 'High performance for complex analysis', badge: 'Pro', group: 'gemini' },
+];
+
+export function workspaceModelOptions() {
+  const seen = new Set();
+  const out = [];
+  for (const m of MODEL_CATALOG) {
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    out.push(m);
+  }
+  for (const e of [...(state.models.workspace || []), ...state.models.engines]) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    // Skip raw API slugs like openrouter/auto — covered by Auto
+    if (String(e.id).toLowerCase() === 'openrouter/auto') continue;
+    seen.add(e.id);
+    out.push({
+      id: e.id,
+      label: e.label || e.id,
+      desc: e.vendor || 'Available model',
+      badge: e.kind === 'hosted' ? 'Hosted' : (e.kind === 'local' ? 'Local' : ''),
+      group: 'other',
+    });
+  }
+  return out;
+}
+
+export function activeModelMeta() {
+  const options = workspaceModelOptions();
+  if (state.models.blend) {
+    return options.find((o) => o.id === 'auto') || options[0];
+  }
+  const id = (state.models.active.size && [...state.models.active][0]) || 'auto';
+  return options.find((o) => o.id === id) || options[0] || { id: 'auto', label: 'Auto (Recommended)' };
+}
+
+/** Apply model without full-page re-render (fixes select refresh loop). */
+export function setActiveModel(id, { toastLabel } = {}) {
+  if (!id) return;
+  if (id === 'auto') {
+    state.models.blend = true;
+    state.settings.blend = true;
+    const gem = (state.models.workspace || [])[0] || state.models.engines[0];
+    if (gem) state.models.active = new Set([gem.id]);
+  } else {
+    state.models.blend = false;
+    state.settings.blend = false;
+    state.models.active = new Set([id]);
+  }
+  const meta = activeModelMeta();
+  const label = toastLabel || meta.label || id;
+  const trigger = document.getElementById('aiModelTrigger');
+  if (trigger) {
+    const name = trigger.querySelector('.ai-model-name');
+    const sub = trigger.querySelector('.ai-model-sub');
+    if (name) name.textContent = meta.label || label;
+    if (sub) sub.textContent = meta.desc || 'Active model';
+  }
+  document.querySelectorAll('.ai-model-option').forEach((row) => {
+    const selected = id === 'auto' ? row.dataset.id === 'auto' : row.dataset.id === id;
+    row.classList.toggle('is-selected', selected);
+    const mark = row.querySelector('.ai-model-check');
+    if (mark) mark.textContent = selected ? '✓' : '';
+  });
+  toast('Model → ' + label);
+}
+
+export function openModelPicker() {
+  const activeId = (state.models.active.size && [...state.models.active][0]) || '';
+  const blendOn = !!state.models.blend;
+  const options = workspaceModelOptions();
+
+  openSheet(`<div class="sheet-back-row">
+      <button type="button" class="sheet-back-btn" id="sheetLogicalBack">← Back</button>
+      <h3 style="margin:0;flex:1;text-align:center;padding-right:56px">Choose model</h3>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin:4px 0 14px">Pick how StatVibe routes AI Workspace tasks. Selection updates instantly — no page refresh.</div>
+    <div class="ai-model-list">
+      ${options.map((o) => {
+        const isSelected = o.id === 'auto' ? blendOn : (!blendOn && o.id === activeId);
+        return `<button type="button" class="ai-model-option${isSelected ? ' is-selected' : ''}" data-id="${esc(o.id)}">
+          <div class="ai-model-option-copy">
+            <div class="ai-model-option-title">${esc(o.label)}${o.badge ? `<span class="ai-model-badge">${esc(o.badge)}</span>` : ''}</div>
+            <div class="ai-model-option-desc">${esc(o.desc || '')}</div>
+          </div>
+          <span class="ai-model-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        </button>`;
+      }).join('')}
+    </div>`);
+
+  setTimeout(() => {
+    const back = document.getElementById('sheetLogicalBack');
+    if (back) back.onclick = () => closeSheet();
+    document.querySelectorAll('.ai-model-option').forEach((row) => {
+      row.onclick = () => {
+        setActiveModel(row.dataset.id);
+        closeSheet();
+      };
+    });
+  }, 20);
 }

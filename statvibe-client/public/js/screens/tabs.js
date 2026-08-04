@@ -9,6 +9,22 @@ import { computeRetail, computeProduct } from '../calc-math.js';
 import { totalRevenue, cumulativeSeries, chartSvgMarkup, periodDelta } from '../revenue-math.js';
 import { mapTabHtml } from '../features/branches.js';
 
+function aiActiveModelMeta() {
+  if (state.models.blend) {
+    return { id: 'auto', label: 'Auto (Recommended)', desc: 'Smart routing picks the best available model' };
+  }
+  const catalog = [
+    { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', desc: 'Fast & efficient for everyday tasks' },
+    { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', desc: 'Balanced speed and quality' },
+    { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: 'High performance for complex analysis' },
+    ...(state.models.workspace || []),
+    ...(state.models.engines || []),
+  ];
+  const id = (state.models.active.size && [...state.models.active][0]) || '';
+  const hit = catalog.find((e) => e && e.id === id);
+  return hit || { id: id || 'auto', label: (hit && hit.label) || 'Auto (Recommended)', desc: 'Tap to switch models' };
+}
+
 export const tabScreens = {};
 export const screens = {};
 
@@ -268,47 +284,31 @@ tabScreens.hub = () => {
 
 tabScreens.ai = () => {
   const m = state.models;
-  const catalog = [
-    ...(m.workspace || []),
-    ...m.engines,
-    ...m.cloud.filter((c) => c.available),
-  ];
-  // Dedupe by id, prefer workspace labels
-  const seen = new Set();
-  const options = [];
-  for (const e of catalog) {
-    if (!e || !e.id || seen.has(e.id)) continue;
-    seen.add(e.id);
-    options.push(e);
-  }
-  // Always show the three Gemini-facing options even if server omitted workspace
-  for (const fallback of [
-    { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-    { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
-    { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  ]) {
-    if (!seen.has(fallback.id)) { seen.add(fallback.id); options.push(fallback); }
-  }
-  const activeId = (m.active.size && [...m.active][0]) || (options[0] && options[0].id) || '';
-  const modelOpts = options.map((e) => `<option value="${esc(e.id)}"${e.id === activeId ? ' selected' : ''}>${esc(e.label || e.id)}</option>`).join('');
+  const meta = aiActiveModelMeta();
   const branches = (state.session.account && state.session.account.branches) || [];
   const low = branches.filter((b) => b.supplyStatus === 'low' || b.supplyStatus === 'critical');
   const prefill = state.aiPrefill || 'Draft a Q3 board update from our latest revenue and margin data.';
   return `
   <div class="scroll pad">
     <div class="row-between mb-14">
-      <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine'} · branch copilot ready</div></div>
+      <div class="flex items-center gap-8">
+        <button type="button" class="iconbtn plain" data-act="logicalBack" title="Back" aria-label="Back">${I.back}</button>
+        <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine'} · branch copilot ready</div></div>
+      </div>
       <button class="pill" data-act="aiHistory" style="height:34px">${I.history('currentColor', 13)} History${state.session.history && state.session.history.length ? ' · ' + state.session.history.length : ''}</button>
     </div>
 
     <div class="eyebrow mb-8">Model</div>
-    <div class="card mb-14" style="padding:12px 14px">
-      <label style="font-size:11px;color:var(--muted-2);font-weight:600;display:block;margin-bottom:6px">Active model</label>
-      <select id="aiModelSelect" data-act="selectModel" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)">
-        ${modelOpts}
-      </select>
-      <div style="font-size:11px;color:var(--muted-2);margin-top:8px">Clean names only — no API slugs in the UI.</div>
-    </div>
+    <button type="button" class="card mb-14 ai-model-trigger" id="aiModelTrigger" data-act="openModelPicker" style="padding:12px 14px;width:100%;text-align:left;cursor:pointer">
+      <div style="font-size:11px;color:var(--muted-2);font-weight:600;margin-bottom:4px">Active model</div>
+      <div class="row-between" style="align-items:center">
+        <div>
+          <div class="ai-model-name" style="font-size:14.5px;font-weight:600">${esc(meta.label || 'Auto (Recommended)')}</div>
+          <div class="ai-model-sub" style="font-size:11.5px;color:var(--muted);margin-top:2px">${esc(meta.desc || 'Tap to switch models')}</div>
+        </div>
+        <span style="color:var(--violet);font-size:18px;line-height:1">›</span>
+      </div>
+    </button>
 
     ${low.length ? `<div class="card mb-14" style="border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);padding:12px 14px">
       <div class="flex items-center" style="gap:8px;margin-bottom:6px">${I.warn('var(--amber)', 16)}<span style="font-size:12.5px;font-weight:600;color:var(--amber)">Branch copilot alert</span></div>

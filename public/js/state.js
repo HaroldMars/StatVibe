@@ -14,6 +14,7 @@ export const state = {
   usage: { used: 0, limit: 50000, resetDays: 7, period: 'week', resetAt: null },
   statsDraft: { revenue: '', products: '', avgPrice: '' },
   aiPrefill: '',
+  mapUi: { fullscreen: false, mode: 'browse', pending: null, drawerId: null },
   lastAIOutput: null,
   alerts: null,          // set on first render
   settings: { blend: true, appearance: 'System', notifications: true },

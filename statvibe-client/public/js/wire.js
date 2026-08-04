@@ -5,7 +5,7 @@ import { openSheet, closeSheet, setOnSheetBackdropDismiss } from './sheet.js';
 import { go, push, back, render } from './router.js';
 import { themePicker } from './theme.js';
 
-import { runWorkspace, titleFor, toggleEngine, loadModels } from './features/ai.js';
+import { runWorkspace, titleFor, toggleEngine, loadModels, openModelPicker, setActiveModel } from './features/ai.js';
 import { editIdea, newIdea, aivibe, aiHistorySheet } from './features/ideas.js';
 import {
   openChat, newChatSheet, agentDraft, agentSend, approveSend, editDraft, agentSettingsSheet,
@@ -27,7 +27,8 @@ import {
 } from './features/account.js';
 import { addRevenueSheet, addRefundSheet, editRevenueSheet } from './features/revenue.js';
 import {
-  openBranchWizard, geocodeAndFly, openBranchDrawer, loadBranches,
+  geocodeAndFly, openBranchDrawer, toggleMapFullscreen, dropPinAtCenter,
+  focusBranch, editBranch, deleteBranch, logicalBack, onMapSheetDismissed,
 } from './features/branches.js';
 
 export function wire(root) {
@@ -47,6 +48,7 @@ export function bindClicks(root) {
       tutorialSkip();
       return true;
     }
+    onMapSheetDismissed();
     return false;
   });
 
@@ -71,7 +73,8 @@ export function bindClicks(root) {
 
     const act = t.dataset.act;
     switch (act) {
-      case 'back': back(); break;
+      case 'back':
+      case 'logicalBack': logicalBack(); break;
       // auth
       case 'toRegister': goAuthScreen('register'); break;
       case 'toLogin': goAuthScreen('login'); break;
@@ -166,13 +169,11 @@ export function bindClicks(root) {
 
       // AI workspace
       case 'toggleEngine': toggleEngine(t.dataset.id); break;
+      case 'openModelPicker': openModelPicker(); break;
       case 'selectModel': {
-        const sel = document.getElementById('aiModelSelect');
-        const id = (sel && sel.value) || t.dataset.id;
-        if (id) {
-          state.models.active = new Set([id]);
-          render();
-        }
+        // Legacy — prefer sheet picker; never full-render on change
+        const id = t.dataset.id;
+        if (id) setActiveModel(id);
         break;
       }
       case 'branchCopilot': {
@@ -185,15 +186,30 @@ export function bindClicks(root) {
         break;
       }
       case 'cloudUnavail': toast(`${t.dataset.l} — Not available yet`); break;
-      case 'toggleBlend': state.models.blend = !state.models.blend; state.settings.blend = state.models.blend; render(); break;
+      case 'toggleBlend': {
+        state.models.blend = !state.models.blend;
+        state.settings.blend = state.models.blend;
+        if (state.models.blend) setActiveModel('auto');
+        else {
+          const id = (state.models.active.size && [...state.models.active][0]) || (state.models.workspace[0] && state.models.workspace[0].id);
+          if (id) setActiveModel(id);
+        }
+        const toggle = t.closest('.toggle') || t;
+        toggle.classList.toggle('on', state.models.blend);
+        break;
+      }
       case 'aiHistory': aiHistorySheet(); break;
       case 'runAI': { const p = ($('#aiPrompt') && $('#aiPrompt').value.trim()) || ''; if (!p) { toast('Type a prompt first'); break; } state.aiPrefill = ''; runWorkspace(p, titleFor(p)); break; }
       case 'runTask': runWorkspace(t.dataset.q, titleFor(t.dataset.q)); break;
 
       // Map / branches
-      case 'addBranch': openBranchWizard({ lat: 14.5995, lng: 120.9842 }); break;
+      case 'addBranch': dropPinAtCenter(); break;
       case 'mapGeocode': geocodeAndFly(); break;
+      case 'mapToggleFs': toggleMapFullscreen(); break;
       case 'openBranch': openBranchDrawer(t.dataset.id); break;
+      case 'focusBranch': focusBranch(t.dataset.id); break;
+      case 'editBranch': editBranch(t.dataset.id); break;
+      case 'deleteBranch': deleteBranch(t.dataset.id); break;
 
       // AI output
       case 'refineAI': if (state.lastAIOutput) runWorkspace('Refine and tighten this document, keeping the same structure:\n\n' + state.lastAIOutput.content, state.lastAIOutput.title); break;
@@ -340,15 +356,6 @@ export function wireScreen(root) {
   const ap = $('#aiPrompt');
   if (ap) ap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { const p = ap.value.trim(); if (p) runWorkspace(p, titleFor(p)); } });
 
-  const modelSel = $('#aiModelSelect');
-  if (modelSel) {
-    modelSel.addEventListener('change', () => {
-      const id = modelSel.value;
-      if (!id) return;
-      state.models.active = new Set([id]);
-      toast('Model → ' + (modelSel.options[modelSel.selectedIndex].text || id));
-    });
-  }
   // Auth forms — Enter submits like Google / Instagram / banking apps.
   const loginForm = root.querySelector('#loginForm');
   if (loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });

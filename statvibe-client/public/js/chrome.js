@@ -20,7 +20,7 @@ export function tabbar(active) {
 
 export function appbar(title, { onSurface = false, right = '' } = {}) {
   return `<div class="appbar ${onSurface ? 'on-surface' : ''}">
-    <button class="iconbtn ${onSurface ? 'plain' : ''}" data-act="back">${I.back}</button>
+    <button class="iconbtn ${onSurface ? 'plain' : ''}" data-act="logicalBack" title="Back" aria-label="Back">${I.back}</button>
     <span class="title">${title}</span>
     ${right || '<div style="width:34px"></div>'}
   </div>`;
