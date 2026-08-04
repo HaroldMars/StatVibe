@@ -7,6 +7,7 @@ export const I = {
   spark: (c = 'currentColor', w = 21, fill = false) => fill
     ? `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="${c}"><path d="M12 2l1.9 5.1L19 9l-5.1 1.9L12 16l-1.9-5.1L5 9l5.1-1.9L12 2Z"/></svg>`
     : `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3Z" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
+  map: (c = 'currentColor', w = 21) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5 9 4.5Z" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 4.5v13M15 6.5v13" stroke="${c}" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   chat: (c = 'currentColor', w = 21) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H9l-4 3v-3H4V5Z" stroke="${c}" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
   bell: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M9.5 20a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   plus: (c = 'currentColor', w = 16) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/></svg>`,

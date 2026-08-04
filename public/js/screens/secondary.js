@@ -53,10 +53,12 @@ screens.revenue = () => {
           : kind === 'adj'
             ? '<span class="tagchip grey">adj</span>'
             : '<span class="tagchip green">sale</span>';
+        const branches = (state.session.account && state.session.account.branches) || [];
+        const brName = e.branchId ? ((branches.find((b) => b.id === e.branchId) || {}).name || 'Branch') : '';
         return `<button class="row" data-act="editRevenue" data-id="${esc(e.id)}" style="text-align:left">
           <div>
             <div style="font-size:13px;font-weight:500${amt < 0 ? ';color:var(--red)' : ''}">${amt > 0 ? '+' : ''}${money(amt)}</div>
-            <div style="font-size:11px;color:var(--muted-2);display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">${kindChip}<span>${esc(e.note || e.category || 'Entry')} · ${esc(when)}</span></div>
+            <div style="font-size:11px;color:var(--muted-2);display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">${kindChip}${brName ? `<span class="tagchip grey">${esc(brName)}</span>` : ''}<span>${esc(e.note || e.category || 'Entry')} · ${esc(when)}</span></div>
           </div>
           <span class="val">Edit ›</span>
         </button>`;

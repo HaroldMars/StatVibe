@@ -7,6 +7,7 @@ import {
 } from '../utils.js';
 import { computeRetail, computeProduct } from '../calc-math.js';
 import { totalRevenue, cumulativeSeries, chartSvgMarkup, periodDelta } from '../revenue-math.js';
+import { mapTabHtml } from '../features/branches.js';
 
 export const tabScreens = {};
 export const screens = {};
@@ -122,6 +123,8 @@ tabScreens.stats = () => `
     ${statsCard()}
   </div>
   ${tabbar('stats')}`;
+
+tabScreens.map = () => mapTabHtml();
 
 tabScreens.calc = () => {
   const c = state.calc;
@@ -265,27 +268,56 @@ tabScreens.hub = () => {
 
 tabScreens.ai = () => {
   const m = state.models;
-  const engineChips = m.engines.map((e) => {
-    const on = m.active.has(e.id);
-    return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${e.id}"><span class="dot" style="background:${on ? 'var(--mint)' : 'var(--teal)'}"></span>${esc(e.label)}</button>`;
-  }).join('');
-  const cloudChips = m.cloud.map((c) => {
-    if (c.available) {
-      const on = m.active.has(c.id);
-      return `<button class="pill ${on ? 'dark' : ''}" data-act="toggleEngine" data-id="${c.id}"><span class="dot" style="background:${on ? 'var(--mint)' : 'var(--teal)'}"></span>${esc(c.label)}</button>`;
-    }
-    return `<button class="pill disabled" data-act="cloudUnavail" data-l="${esc(c.label)}">+ ${esc(c.label)}</button>`;
-  }).join('');
+  const catalog = [
+    ...(m.workspace || []),
+    ...m.engines,
+    ...m.cloud.filter((c) => c.available),
+  ];
+  // Dedupe by id, prefer workspace labels
+  const seen = new Set();
+  const options = [];
+  for (const e of catalog) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    seen.add(e.id);
+    options.push(e);
+  }
+  // Always show the three Gemini-facing options even if server omitted workspace
+  for (const fallback of [
+    { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+    { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
+    { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+  ]) {
+    if (!seen.has(fallback.id)) { seen.add(fallback.id); options.push(fallback); }
+  }
+  const activeId = (m.active.size && [...m.active][0]) || (options[0] && options[0].id) || '';
+  const modelOpts = options.map((e) => `<option value="${esc(e.id)}"${e.id === activeId ? ' selected' : ''}>${esc(e.label || e.id)}</option>`).join('');
+  const branches = (state.session.account && state.session.account.branches) || [];
+  const low = branches.filter((b) => b.supplyStatus === 'low' || b.supplyStatus === 'critical');
   const prefill = state.aiPrefill || 'Draft a Q3 board update from our latest revenue and margin data.';
   return `
   <div class="scroll pad">
     <div class="row-between mb-14">
-      <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine · start Ollama'} · blend for smarter output</div></div>
+      <div><div class="h-page">AI Workspace</div><div class="sub">${m.ollamaOnline ? 'Local models · Ollama online' : m.hosted ? 'Hosted AI · live' : 'Simulated engine'} · branch copilot ready</div></div>
       <button class="pill" data-act="aiHistory" style="height:34px">${I.history('currentColor', 13)} History${state.session.history && state.session.history.length ? ' · ' + state.session.history.length : ''}</button>
     </div>
 
-    <div class="eyebrow mb-8">Active models</div>
-    <div class="flex gap-8 mb-14 flex-wrap">${engineChips}${cloudChips}</div>
+    <div class="eyebrow mb-8">Model</div>
+    <div class="card mb-14" style="padding:12px 14px">
+      <label style="font-size:11px;color:var(--muted-2);font-weight:600;display:block;margin-bottom:6px">Active model</label>
+      <select id="aiModelSelect" data-act="selectModel" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)">
+        ${modelOpts}
+      </select>
+      <div style="font-size:11px;color:var(--muted-2);margin-top:8px">Clean names only — no API slugs in the UI.</div>
+    </div>
+
+    ${low.length ? `<div class="card mb-14" style="border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);padding:12px 14px">
+      <div class="flex items-center" style="gap:8px;margin-bottom:6px">${I.warn('var(--amber)', 16)}<span style="font-size:12.5px;font-weight:600;color:var(--amber)">Branch copilot alert</span></div>
+      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;margin-bottom:10px">${esc(low[0].name)} looks ${esc(low[0].supplyStatus)} (stock ${Number(low[0].stockLevel) || 0} / threshold ${Number(low[0].stockThreshold) || 0}). Ask the copilot for a restock plan.</div>
+      <button class="btn sm" data-act="branchCopilot" data-id="${esc(low[0].id)}" style="width:auto;padding:8px 12px">Analyze ${esc(low[0].name)} →</button>
+    </div>` : `<div class="card mb-14" style="padding:12px 14px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25)">
+      <div style="font-size:12.5px;font-weight:600;color:#8B5CF6;margin-bottom:4px">Branch copilot</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45">Add branches on the Map tab — the copilot reads supply levels and suggests restocks when stock runs thin.</div>
+    </div>`}
 
     <div class="flex items-center row-between" style="background:var(--teal-tint-2);border:1px solid var(--teal-tint-border);border-radius:12px;padding:11px 13px;margin-bottom:16px">
       <div><div style="font-size:12.5px;font-weight:600;color:var(--teal-deep)">Blend mode</div><div style="font-size:11px;color:var(--muted)">Route each task to the best model automatically</div></div>

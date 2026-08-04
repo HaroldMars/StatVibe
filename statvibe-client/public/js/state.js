@@ -9,7 +9,7 @@ export const state = {
   supply: { onHand: 1240, reorder: 400, cover: 22 },
   setupDraft: { sellsProducts: true, goals: [] },
   predictions: {},   // itemId -> prediction result cache
-  models: { engines: [], cloud: [], ollamaOnline: false, active: new Set(), blend: true, loaded: false },
+  models: { engines: [], cloud: [], workspace: [], ollamaOnline: false, active: new Set(), blend: true, loaded: false },
   plan: 'Free',
   usage: { used: 0, limit: 50000, resetDays: 7, period: 'week', resetAt: null },
   statsDraft: { revenue: '', products: '', avgPrice: '' },

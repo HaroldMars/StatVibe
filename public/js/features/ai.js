@@ -10,15 +10,22 @@ export async function loadModels() {
     const d = await r.json();
     state.models.engines = d.engines || [];
     state.models.cloud = d.cloud || [];
+    state.models.workspace = d.workspace || [];
     state.models.ollamaOnline = !!d.ollama_online;
     state.models.hosted = !!d.hosted;
     if (d.admin_user) state.admin.user = d.admin_user;
     if (!state.models.loaded && typeof d.default_blend === 'boolean') state.models.blend = d.default_blend;
     // Drop any active model that no longer exists (e.g. a cloud model disabled by admin).
-    const valid = new Set([...state.models.engines, ...state.models.cloud.filter((c) => c.available)].map((e) => e.id));
+    // Workspace Gemini options stay selectable even when they remap to hosted AI_MODEL.
+    const valid = new Set([
+      ...(state.models.workspace || []),
+      ...state.models.engines,
+      ...state.models.cloud.filter((c) => c.available),
+    ].map((e) => e.id));
     state.models.active.forEach((id) => { if (!valid.has(id)) state.models.active.delete(id); });
-    if (state.models.active.size === 0 && state.models.engines[0]) {
-      state.models.active.add(state.models.engines[0].id);
+    if (state.models.active.size === 0) {
+      const first = (state.models.workspace && state.models.workspace[0]) || state.models.engines[0];
+      if (first) state.models.active.add(first.id);
     }
     state.models.loaded = true;
     const s = document.getElementById('aiStatus');
@@ -91,7 +98,16 @@ export async function runWorkspace(prompt, title) {
   const el = app();
   // show a loading state in the card
   const card = el.querySelector('.card [style*="line-height:1.6"]') || el.querySelector('.card');
-  if (card) card.innerHTML = `<div class="typing" style="color:var(--muted)"><i></i><i></i><i></i></div><div style="font-size:12px;color:var(--muted-2);margin-top:8px">Generating with ${esc((state.models.active.size && [...state.models.active][0]) || 'AI')}…</div>`;
+  if (card) {
+    const activeId = (state.models.active.size && [...state.models.active][0]) || 'AI';
+    const label = (
+      (state.models.workspace || []).find((e) => e.id === activeId)
+      || state.models.engines.find((e) => e.id === activeId)
+      || (state.models.cloud || []).find((e) => e.id === activeId)
+      || {}
+    ).label || activeId;
+    card.innerHTML = `<div class="typing" style="color:var(--muted)"><i></i><i></i><i></i></div><div style="font-size:12px;color:var(--muted-2);margin-top:8px">Generating with ${esc(label)}…</div>`;
+  }
   try {
     const d = await callAI(prompt, SYS);
     if (d && (d.code === 'quota_exceeded' || d.upgradeRequired && !d.content)) {

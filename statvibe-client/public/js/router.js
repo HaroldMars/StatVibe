@@ -5,7 +5,25 @@ import { wire } from './wire.js';
 import { loadConversations } from './features/messaging.js';
 
 export function currentScreen() { return state.stack.length ? state.stack[state.stack.length - 1].screen : state.tab; }
-export function go(tab) { state.tab = tab; state.stack = []; render(); if (tab === 'agent') loadConversations().then(() => { if (state.tab === 'agent' && !state.stack.length) render(); }); }
+export function go(tab) {
+  const prev = state.tab;
+  state.tab = tab;
+  state.stack = [];
+  render();
+  if (tab === 'agent') loadConversations().then(() => { if (state.tab === 'agent' && !state.stack.length) render(); });
+  if (tab === 'map') {
+    import('./features/branches.js').then((m) => {
+      m.loadBranches().then(() => {
+        if (state.tab === 'map' && !state.stack.length) {
+          render();
+          setTimeout(() => m.initBranchMap(), 30);
+        }
+      }).catch(() => setTimeout(() => m.initBranchMap(), 30));
+    });
+  } else if (prev === 'map') {
+    import('./features/branches.js').then((m) => m.teardownBranchMap()).catch(() => {});
+  }
+}
 export function push(screen, params = {}) { state.stack.push({ screen, params }); render(); }
 export function back() { state.stack.pop(); render(); }
 
@@ -45,4 +63,7 @@ export function render() {
   el.innerHTML = `<div class="screen fade-in">${html}</div>`;
   el.querySelector('.scroll') && (el.querySelector('.scroll').scrollTop = 0);
   wire(el);
+  if (!state.stack.length && state.tab === 'map' && state.authed) {
+    import('./features/branches.js').then((m) => setTimeout(() => m.initBranchMap(), 20)).catch(() => {});
+  }
 }

@@ -10,6 +10,7 @@ export function tabbar(active) {
   const unread = (state.session && state.session.unreadTotal) || 0;
   return `<div class="tabbar">
     ${item('stats', 'Stats', I.bars)}
+    ${item('map', 'Map', I.map)}
     ${item('calc', 'Calc', I.calc)}
     ${item('hub', 'Hub', I.bulb)}
     ${item('ai', 'AI', (c) => I.spark(c))}

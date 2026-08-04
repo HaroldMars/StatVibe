@@ -26,7 +26,7 @@ export function applyHash() {
   if (h === 'admin') { location.href = '/admin'; return; } // developer console is a separate app
   // Other deep links require a real, set-up session.
   if (!state.authed || !(state.session.account && state.session.account.setupComplete)) return;
-  const tabs = ['stats', 'calc', 'hub', 'ai', 'agent'];
+  const tabs = ['stats', 'map', 'calc', 'hub', 'ai', 'agent'];
   const subs = ['plans', 'settings', 'profile', 'security', 'alerts', 'revenue', 'aiOutput'];
   if (tabs.includes(h)) go(h);
   else if (subs.includes(h)) { state.stack = [{ screen: h, params: {} }]; render(); }
