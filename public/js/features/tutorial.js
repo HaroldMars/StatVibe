@@ -38,6 +38,8 @@ export function needsTutorial() {
 
 export function maybeShowTutorial() {
   if (!needsTutorial()) return false;
+  // Guard against double-open (boot + finishSetup race).
+  if (state.tutorial && state.tutorial.open) return true;
   state.tutorial = { open: true, step: -1 }; // -1 = intro modal
   showTutorialSheet();
   return true;

@@ -140,11 +140,25 @@ export function startApp() {
   window.addEventListener('hashchange', applyHash);
 
   // Light polling so new messages/conversations appear without a refresh.
+  let lastAgentSig = '';
   setInterval(() => {
     if (!state.authed || !(state.session.account && state.session.account.setupComplete)) return;
     const scr = currentScreen();
     if (scr === 'chat') refreshChat();
-    else if (scr === 'agent') loadConversations().then(() => { if (currentScreen() === 'agent') render(); });
+    else if (scr === 'agent') {
+      loadConversations().then((data) => {
+        if (currentScreen() !== 'agent') return;
+        const sig = JSON.stringify({
+          n: (state.session.conversations || []).length,
+          u: state.session.unreadTotal,
+          last: (state.session.conversations || []).slice(0, 5).map((c) => [c.id, c.lastAt, c.unread]),
+        });
+        if (sig !== lastAgentSig) {
+          lastAgentSig = sig;
+          render();
+        }
+      });
+    }
   }, 5000);
 
   // Register the service worker so StatVibe is installable on iOS/Android.
