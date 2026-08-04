@@ -17,7 +17,7 @@ const sans = Sora({
 export const metadata: Metadata = {
   title: 'StatVibe — Feel the pulse of your business',
   description:
-    'Real-time analytics, mobile-first insights, and automated vibe checks. Launch the StatVibe app from this marketing site.',
+    'Real-time analytics, mobile-first insights, and automated vibe checks. Run the whole business from one screen.',
   icons: {
     icon: '/logo-main.png',
     apple: '/icon-192.png',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className={`${display.variable} ${sans.variable} antialiased`}>{children}</body>
     </html>
   );

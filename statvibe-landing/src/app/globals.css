@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --bg-0: #070b12;
-  --bg-1: #0c1220;
-  --ink: #e8eef8;
-  --muted: #6e7f9c;
-  --signal: #2dd4bf;
+  --bg: #f4f7f1;
+  --ink: #0b1810;
+  --muted: #7c867e;
+  --leaf: #1a8f4d;
+  --lime: #c0f26d;
   --font-display: 'Fraunces', Georgia, serif;
   --font-sans: 'Sora', ui-sans-serif, system-ui, sans-serif;
 }
@@ -19,23 +19,30 @@ html {
 body {
   color: var(--ink);
   background:
-    radial-gradient(ellipse 90% 55% at 10% -15%, rgba(45, 212, 191, 0.18), transparent 50%),
-    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(245, 158, 11, 0.1), transparent 45%),
-    linear-gradient(180deg, #070b12 0%, #0c1220 40%, #0a101c 100%);
+    radial-gradient(ellipse 90% 55% at 8% -10%, rgba(192, 242, 109, 0.35), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 95% 5%, rgba(26, 143, 77, 0.12), transparent 50%),
+    linear-gradient(180deg, #f4f7f1 0%, #ecf3e8 45%, #f7f7f2 100%);
   font-family: var(--font-sans);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: rgba(45, 212, 191, 0.35);
-  color: #fff;
+  background: rgba(192, 242, 109, 0.55);
+  color: #0b1810;
 }
 
-.grid-fade {
+.hero-mesh {
   background-image:
-    linear-gradient(rgba(232, 238, 248, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 238, 248, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+    linear-gradient(rgba(11, 24, 16, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 24, 16, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 75% 65% at 40% 30%, black 15%, transparent 75%);
+}
+
+.glass {
+  background: rgba(247, 247, 242, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(28, 63, 39, 0.1);
 }

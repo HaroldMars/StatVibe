@@ -9,23 +9,26 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/5 bg-ink-950/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-leaf-800/10 bg-cream/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <a href="#top" className="group flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal/15 ring-1 ring-signal/30">
-            <span className="h-2.5 w-2.5 rounded-full bg-signal shadow-[0_0_12px_rgba(45,212,191,0.8)]" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-leaf-400/50 ring-1 ring-leaf-800/15">
+            <span className="h-2.5 w-2.5 rounded-full bg-leaf-600" />
           </span>
-          <span className="font-display text-xl font-semibold tracking-tight text-mist-100 transition group-hover:text-white">
+          <span className="font-display text-xl font-semibold tracking-tight text-leaf-950">
             StatVibe
           </span>
         </a>
 
-        <nav className="hidden items-center gap-8 text-sm text-mist-300 md:flex">
-          <a href="#features" className="transition hover:text-mist-100">
-            Features
+        <nav className="hidden items-center gap-8 text-sm text-moss-500 md:flex">
+          <a href="#how" className="transition hover:text-leaf-950">
+            How it works
           </a>
-          <a href="#cta" className="transition hover:text-mist-100">
-            Get started
+          <a href="#compare" className="transition hover:text-leaf-950">
+            Compare
+          </a>
+          <a href="#features" className="transition hover:text-leaf-950">
+            Features
           </a>
         </nav>
 
@@ -34,7 +37,7 @@ export function Navbar() {
             type="button"
             onClick={openLaunch}
             disabled={!ready}
-            className="rounded-xl px-3.5 py-2 text-sm text-mist-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-full px-3.5 py-2 text-sm text-moss-500 transition hover:text-leaf-950 disabled:opacity-50"
           >
             Launch App
           </button>
@@ -42,7 +45,7 @@ export function Navbar() {
             type="button"
             onClick={openGetStarted}
             disabled={!ready}
-            className="rounded-xl bg-signal px-4 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:bg-signal-deep hover:text-white disabled:opacity-50"
+            className="rounded-full bg-leaf-950 px-4 py-2 text-sm font-semibold text-cream transition hover:bg-leaf-800 disabled:opacity-50"
           >
             Get Started
           </button>
@@ -50,7 +53,7 @@ export function Navbar() {
 
         <button
           type="button"
-          className="rounded-lg p-2 text-mist-300 md:hidden"
+          className="rounded-lg p-2 text-moss-500 md:hidden"
           aria-label={open ? 'Close menu' : 'Open menu'}
           onClick={() => setOpen((v) => !v)}
         >
@@ -59,14 +62,17 @@ export function Navbar() {
       </div>
 
       {open && (
-        <div className="border-t border-white/5 bg-ink-900 px-4 py-4 md:hidden">
+        <div className="border-t border-leaf-800/10 bg-cream px-4 py-4 md:hidden">
           <div className="flex flex-col gap-3 text-sm">
-            <a href="#features" className="text-mist-300" onClick={() => setOpen(false)}>
+            <a href="#how" onClick={() => setOpen(false)} className="text-moss-500">
+              How it works
+            </a>
+            <a href="#features" onClick={() => setOpen(false)} className="text-moss-500">
               Features
             </a>
             <button
               type="button"
-              className="rounded-xl border border-white/10 px-4 py-2.5 text-left text-mist-100"
+              className="rounded-full border border-leaf-800/15 px-4 py-2.5 text-left"
               onClick={() => {
                 setOpen(false);
                 openLaunch();
@@ -76,7 +82,7 @@ export function Navbar() {
             </button>
             <button
               type="button"
-              className="rounded-xl bg-signal px-4 py-2.5 text-left font-semibold text-ink-950"
+              className="rounded-full bg-leaf-950 px-4 py-2.5 text-left font-semibold text-cream"
               onClick={() => {
                 setOpen(false);
                 openGetStarted();
