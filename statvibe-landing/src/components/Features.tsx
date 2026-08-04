@@ -26,7 +26,7 @@ const FEATURES: FeatureItem[] = [
   {
     id: 'ops',
     title: 'Ops in One Place',
-    description: 'Inventory, calculators, idea hub, and AgentTech messaging — one authenticated workspace.',
+    description: 'Inventory, calculators, idea hub, and AgentTech messaging — one workspace.',
     accent: 'signal',
   },
 ];
@@ -38,15 +38,9 @@ const ICONS = {
   ops: Zap,
 } as const;
 
-const ACCENT: Record<FeatureItem['accent'], string> = {
-  signal: 'bg-signal/15 text-signal ring-signal/25',
-  ember: 'bg-ember/15 text-ember ring-ember/25',
-  sky: 'bg-sky-400/15 text-sky-300 ring-sky-400/25',
-};
-
 export function Features() {
   return (
-    <section id="features" className="relative border-t border-white/5 py-20 sm:py-28">
+    <section id="features" className="relative border-t border-leaf-800/10 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -55,10 +49,10 @@ export function Features() {
           transition={{ duration: 0.5 }}
           className="max-w-2xl"
         >
-          <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          <h2 className="font-display text-3xl font-semibold tracking-tight text-leaf-950 sm:text-4xl">
             Built for the rhythm of real work
           </h2>
-          <p className="mt-3 text-mist-500">
+          <p className="mt-3 text-moss-500">
             Four capabilities that keep StatVibe feeling alive — not another spreadsheet you abandon.
           </p>
         </motion.div>
@@ -73,15 +67,13 @@ export function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-40px' }}
                 transition={{ duration: 0.45, delay: i * 0.06 }}
-                className="rounded-2xl border border-white/8 bg-ink-800/60 p-6 shadow-soft backdrop-blur-sm transition hover:border-signal/25 hover:bg-ink-700/50"
+                className="rounded-2xl border border-leaf-800/10 bg-white/70 p-6 shadow-soft transition hover:border-leaf-600/30 hover:bg-leaf-100/80"
               >
-                <div
-                  className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl ring-1 ${ACCENT[feature.accent]}`}
-                >
+                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-leaf-400/50 text-leaf-800 ring-1 ring-leaf-800/10">
                   <Icon size={20} />
                 </div>
-                <h3 className="text-lg font-semibold text-mist-100">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-mist-500">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-leaf-950">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-moss-500">{feature.description}</p>
               </motion.article>
             );
           })}

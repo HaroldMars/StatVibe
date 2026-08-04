@@ -1,5 +1,7 @@
 import { Navbar } from '@/components/Navbar';
 import { Hero } from '@/components/Hero';
+import { HowItWorks } from '@/components/HowItWorks';
+import { Compare } from '@/components/Compare';
 import { Features } from '@/components/Features';
 import { CtaBanner } from '@/components/CtaBanner';
 import { Footer } from '@/components/Footer';
@@ -10,6 +12,8 @@ export default function HomePage() {
       <Navbar />
       <main>
         <Hero />
+        <HowItWorks />
+        <Compare />
         <Features />
         <CtaBanner />
       </main>

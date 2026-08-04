@@ -1,21 +1,39 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowRight, Play } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useDeviceRedirect } from '@/hooks/useDeviceRedirect';
 
 export function Hero() {
-  const { openLaunch, openDemo, ready, isMobile } = useDeviceRedirect();
+  const { openGetStarted, openDemo, ready } = useDeviceRedirect();
 
   return (
     <section className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 grid-fade" aria-hidden />
-      <div className="relative mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col justify-center px-4 pb-20 pt-14 sm:px-6 sm:pt-20">
+      <div className="pointer-events-none absolute inset-0 hero-mesh" aria-hidden />
+      <div
+        className="pointer-events-none absolute -left-24 top-10 h-64 w-64 rounded-full bg-leaf-400/40 blur-3xl"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -right-16 top-24 h-72 w-72 rounded-full bg-leaf-600/15 blur-3xl"
+        aria-hidden
+      />
+
+      <div className="relative mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col justify-center px-4 pb-24 pt-16 sm:px-6 sm:pt-24">
         <motion.p
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="font-display text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl"
+          transition={{ duration: 0.45 }}
+          className="mb-5 inline-flex w-fit items-center rounded-full border border-leaf-800/10 bg-white/60 px-3 py-1 text-xs font-medium text-leaf-800"
+        >
+          Now live for growing teams
+        </motion.p>
+
+        <motion.p
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.05 }}
+          className="font-display text-5xl font-semibold tracking-tight text-leaf-950 sm:text-6xl md:text-7xl lg:text-[5.25rem] lg:leading-[0.95]"
         >
           StatVibe
         </motion.p>
@@ -23,33 +41,35 @@ export function Hero() {
         <motion.h1
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.08 }}
-          className="mt-5 max-w-3xl text-2xl font-medium leading-snug text-mist-100 sm:text-3xl md:text-4xl"
+          transition={{ duration: 0.55, delay: 0.12 }}
+          className="mt-5 max-w-3xl font-display text-3xl font-medium leading-[1.15] text-leaf-900 sm:text-4xl md:text-5xl"
         >
-          Feel the pulse of your business — live analytics, mobile-first insights, automated vibe checks.
+          Business noise hides.
+          <br />
+          <span className="text-leaf-600">StatVibe</span> hunts the signal.
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.16 }}
-          className="mt-5 max-w-xl text-base leading-relaxed text-mist-500 sm:text-lg"
+          transition={{ duration: 0.55, delay: 0.2 }}
+          className="mt-6 max-w-xl text-base leading-relaxed text-moss-500 sm:text-lg"
         >
-          One screen for revenue, inventory, ideas, and AI copilots. Built for teams who move on phones
-          first and desktops when it counts.
+          One screen for revenue, inventory, ideas, and AI copilots. StatVibe watches the pulse of
+          your business and surfaces what needs a human — before the day gets away from you.
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.24 }}
+          transition={{ duration: 0.55, delay: 0.28 }}
           className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center"
         >
           <button
             type="button"
-            onClick={openLaunch}
+            onClick={openGetStarted}
             disabled={!ready}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-signal px-6 py-3.5 text-base font-semibold text-ink-950 shadow-glow transition hover:bg-signal-deep hover:text-white disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-leaf-950 px-6 py-3.5 text-base font-semibold text-cream shadow-lift transition hover:bg-leaf-800 disabled:opacity-50"
           >
             Launch App
             <ArrowRight size={18} />
@@ -58,33 +78,11 @@ export function Hero() {
             type="button"
             onClick={openDemo}
             disabled={!ready}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3.5 text-base font-medium text-mist-100 backdrop-blur transition hover:border-signal/40 hover:bg-signal/10 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-leaf-800/15 bg-white/70 px-6 py-3.5 text-base font-medium text-leaf-900 backdrop-blur transition hover:border-leaf-600/40 hover:bg-leaf-100 disabled:opacity-50"
           >
-            <Play size={16} className="text-signal" />
             View Demo
           </button>
         </motion.div>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="mt-4 text-xs text-mist-500"
-        >
-          {ready
-            ? isMobile
-              ? 'Mobile detected — Launch opens the live app (or store when configured).'
-              : 'Desktop detected — Launch opens the web app; Get Started walks you through signup.'
-            : 'Detecting device…'}
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="pointer-events-none absolute -right-16 bottom-8 hidden h-72 w-72 rounded-full bg-signal/10 blur-3xl md:block"
-          aria-hidden
-        />
       </div>
     </section>
   );
