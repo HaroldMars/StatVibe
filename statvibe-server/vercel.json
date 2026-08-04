@@ -11,5 +11,13 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "/api/index.js" }
-  ]
+  ],
+  "ignoreCommand": "node ../scripts/vercel-ignore-unchanged.cjs",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "*": false,
+      "**": false
+    }
+  }
 }
