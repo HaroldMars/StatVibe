@@ -10,6 +10,7 @@ const store = require('./lib/store');
 const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
 const revenueLib = require('./lib/revenue');
+const branchLib = require('./lib/branches');
 const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 const { sanitizeEntry, sanitizeEntries, migrateAccountRevenue, totalRevenue } = revenueLib;
 
@@ -211,6 +212,43 @@ function simulate(messages) {
 const AI_API_URL = process.env.AI_API_URL;   // e.g. https://api.groq.com/openai/v1/chat/completions
 const AI_API_KEY = process.env.AI_API_KEY;
 const AI_MODEL = process.env.AI_MODEL || 'llama-3.1-8b-instant';
+
+/** Friendly labels for hosted / OpenRouter-style model slugs. */
+function friendlyModelLabel(id) {
+  const raw = String(id || '');
+  const key = raw.toLowerCase();
+  const MAP = {
+    'openrouter/auto': 'Auto (best available)',
+    'google/gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+    'google/gemini-2.5-flash-lite-preview': 'Gemini 2.5 Flash Lite',
+    'google/gemini-2.0-flash-lite': 'Gemini 2.5 Flash Lite',
+    'google/gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+    'google/gemini-3.5-flash-lite-preview': 'Gemini 3.5 Flash Lite',
+    'google/gemini-3.6-flash': 'Gemini 3.6 Flash',
+    'google/gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'google/gemini-flash-1.5': 'Gemini Flash',
+    'openai/gpt-4o': 'GPT-4o',
+    'openai/gpt-4o-mini': 'GPT-4o Mini',
+    'anthropic/claude-3.5-sonnet': 'Claude 3.5 Sonnet',
+    'llama-3.1-8b-instant': 'Llama 3.1 Instant',
+    'llama-3.3-70b-versatile': 'Llama 3.3 Versatile',
+  };
+  if (MAP[key]) return MAP[key];
+  if (key.includes('gemini-3.6')) return 'Gemini 3.6 Flash';
+  if (key.includes('gemini-3.5') && key.includes('lite')) return 'Gemini 3.5 Flash Lite';
+  if (key.includes('gemini-2.5') && key.includes('lite')) return 'Gemini 2.5 Flash Lite';
+  if (key.includes('gemini') && key.includes('flash')) return 'Gemini Flash';
+  const bare = raw.split('/').pop() || raw;
+  return bare.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 48);
+}
+
+/** Catalog shown in the AI Workspace model selector (ids may map to hosted AI_MODEL). */
+const WORKSPACE_MODELS = [
+  { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', vendor: 'Google' },
+  { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', vendor: 'Google' },
+  { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', vendor: 'Google' },
+];
+
 // Cap output so providers (OpenRouter, etc.) don't reject for requesting the
 // full context window — OpenRouter errors hard when max_tokens > remaining balance.
 const AI_MAX_TOKENS = Math.max(64, Math.min(Number(process.env.AI_MAX_TOKENS) || 2048, 32768));
@@ -245,16 +283,28 @@ function recordUsage(model, usage, promptText, content) {
 async function handleModels(res) {
   const local = config.simulateOnly ? [] : await listOllamaModels();
   const ollamaModels = local.map((name) => ({
-    id: name, label: name.split(':')[0].replace(/^\w/, (c) => c.toUpperCase()),
+    id: name, label: friendlyModelLabel(name),
     vendor: 'Ollama (local)', kind: 'local', available: true,
   }));
   const engines = ollamaModels.length
     ? ollamaModels
     : hostedConfigured()
-      ? [{ id: AI_MODEL, label: AI_MODEL, vendor: 'Hosted AI', kind: 'hosted', available: true }]
+      ? [{ id: AI_MODEL, label: friendlyModelLabel(AI_MODEL), vendor: 'Hosted AI', kind: 'hosted', available: true }]
       : [{ id: 'simulated', label: 'Simulated', vendor: 'StatVibe demo', kind: 'local', available: true }];
-  const cloud = CLOUD_MODELS.map((c) => ({ ...c, kind: 'cloud', available: !!config.cloudAvailable[c.id] }));
-  sendJSON(res, 200, { ollama_online: ollamaModels.length > 0, hosted: hostedConfigured(), simulate_only: config.simulateOnly, default_blend: config.defaultBlend, admin_user: ADMIN_USER, engines, cloud });
+  const workspace = WORKSPACE_MODELS.map((m) => ({
+    ...m, kind: 'workspace', available: hostedConfigured() || ollamaModels.length > 0 || true,
+  }));
+  const cloud = CLOUD_MODELS.map((c) => ({ ...c, label: friendlyModelLabel(c.id) || c.label, kind: 'cloud', available: !!config.cloudAvailable[c.id] }));
+  sendJSON(res, 200, {
+    ollama_online: ollamaModels.length > 0,
+    hosted: hostedConfigured(),
+    simulate_only: config.simulateOnly,
+    default_blend: config.defaultBlend,
+    admin_user: ADMIN_USER,
+    engines,
+    workspace,
+    cloud,
+  });
 }
 
 async function handleChat(req, res, body) {
@@ -566,6 +616,7 @@ function blankAccount() {
     aiUsed: 0, aiPeriodStart: Date.now(),
     statsDraft: { revenue: '', products: '', avgPrice: '' },
     revenueEntries: [],
+    branches: [],
     calc: { tab: 'Retail', unitCost: 42, freight: 5.72, overhead: 5.1, targetMargin: 55, markup: 55 },
     supply: { onHand: 0, reorder: 0, cover: 0 },
   };
@@ -829,6 +880,7 @@ async function handleAccount(req, res, sub, body) {
     if (b.statsDraft !== undefined) acct.statsDraft = sanitizeStatsDraft(b.statsDraft);
     if (b.calc !== undefined) acct.calc = sanitizeCalc(b.calc);
     if (b.supply !== undefined) acct.supply = sanitizeSupply(b.supply);
+    if (b.branches !== undefined) acct.branches = branchLib.sanitizeBranches(b.branches);
     await store.setAccount(user.id, acct);
     return sendJSON(res, 200, { ok: true, account: acct });
   }
@@ -977,6 +1029,48 @@ function handleMeta(res) {
   });
 }
 
+// --- Branches (multi-location map) ----------------------------------------
+async function handleBranches(req, res, sub, body) {
+  const authed = await getAuthUser(req);
+  if (!authed) return sendJSON(res, 401, { error: 'Not signed in' });
+  const { user } = authed;
+  let acct = await store.getAccount(user.id) || blankAccount();
+  if (!Array.isArray(acct.branches)) acct.branches = [];
+
+  if (sub === '' && req.method === 'GET') {
+    return sendJSON(res, 200, { branches: branchLib.sanitizeBranches(acct.branches), account: acct });
+  }
+  if (sub === '' && req.method === 'POST') {
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const branch = branchLib.sanitizeBranch(b);
+    if (!branch) return sendJSON(res, 400, { error: 'Branch needs a name and valid coordinates' });
+    acct.branches = branchLib.sanitizeBranches([...(acct.branches || []), branch]);
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 201, { branch, branches: acct.branches, account: acct });
+  }
+  const id = sub;
+  if (id && req.method === 'PATCH') {
+    const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const list = acct.branches || [];
+    const idx = list.findIndex((x) => x.id === id);
+    if (idx < 0) return sendJSON(res, 404, { error: 'Branch not found' });
+    const next = branchLib.sanitizeBranch({ ...list[idx], ...b, id: list[idx].id }, { requireId: true });
+    if (!next) return sendJSON(res, 400, { error: 'Invalid branch update' });
+    list[idx] = next;
+    acct.branches = branchLib.sanitizeBranches(list);
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 200, { branch: next, branches: acct.branches, account: acct });
+  }
+  if (id && req.method === 'DELETE') {
+    const before = (acct.branches || []).length;
+    acct.branches = (acct.branches || []).filter((x) => x.id !== id);
+    if (acct.branches.length === before) return sendJSON(res, 404, { error: 'Branch not found' });
+    await store.setAccount(user.id, acct);
+    return sendJSON(res, 200, { ok: true, branches: acct.branches, account: acct });
+  }
+  return sendJSON(res, 404, { error: 'Unknown branches endpoint' });
+}
+
 // --- Revenue ledger (sales + refunds; total = sum; chart rises and falls) ----
 async function handleRevenue(req, res, sub, body) {
   const authed = await getAuthUser(req);
@@ -994,6 +1088,14 @@ async function handleRevenue(req, res, sub, body) {
 
   if (sub === '' && req.method === 'POST') {
     const b = parseJSON(body); if (!b) return sendJSON(res, 400, { error: 'Invalid JSON' });
+    const clientRequestId = b.clientRequestId || b.idempotencyKey || '';
+    if (clientRequestId) {
+      const existing = (acct.revenueEntries || []).find((e) => e.clientRequestId === String(clientRequestId).slice(0, 80));
+      if (existing) {
+        const total = totalRevenue(acct.revenueEntries);
+        return sendJSON(res, 200, { entry: existing, entries: acct.revenueEntries, total, account: acct, deduped: true });
+      }
+    }
     const entry = sanitizeEntry({ ...b, id: undefined, createdAt: b.createdAt || Date.now() });
     if (!entry) return sendJSON(res, 400, { error: 'Enter a non-zero amount (sales or refunds)', code: 'invalid_amount' });
     acct.revenueEntries = sanitizeEntries([...(acct.revenueEntries || []), entry]);
@@ -1257,6 +1359,7 @@ async function requestHandler(req, res) {
     }
     if (p === '/api/inventory' || p.startsWith('/api/inventory/')) return handleInventory(req, res, p === '/api/inventory' ? '' : p.slice('/api/inventory/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/revenue' || p.startsWith('/api/revenue/')) return handleRevenue(req, res, p === '/api/revenue' ? '' : p.slice('/api/revenue/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
+    if (p === '/api/branches' || p.startsWith('/api/branches/')) return handleBranches(req, res, p === '/api/branches' ? '' : p.slice('/api/branches/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/predict' && req.method === 'POST') return handlePredict(req, res, await readBody(req));
     if (p === '/api/ideas' || p.startsWith('/api/ideas/')) return handleIdeas(req, res, p === '/api/ideas' ? '' : p.slice('/api/ideas/'.length), ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null);
     if (p.startsWith('/api/ai/')) return handleAIHistory(req, res, p.slice('/api/ai/'.length), ['POST'].includes(req.method) ? await readBody(req) : null);

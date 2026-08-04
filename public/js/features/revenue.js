@@ -5,6 +5,14 @@ import { openSheet, closeSheet } from '../sheet.js';
 import { render } from '../router.js';
 import { totalRevenue } from '../revenue-math.js';
 
+let lastSubmitAt = 0;
+let inFlight = false;
+
+function newClientRequestId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'cr_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 /** Apply server revenue payload into session state and re-render. */
 export function applyRevenuePayload(data) {
   if (!data) return;
@@ -17,7 +25,6 @@ export function applyRevenuePayload(data) {
     const total = data.total != null ? data.total : totalRevenue(entries);
     state.session.account.statsDraft = {
       ...(state.session.account.statsDraft || {}),
-      // Keep derived total even when 0 / negative after refunds.
       revenue: entries.length ? String(total) : '',
     };
     state.statsDraft = {
@@ -32,6 +39,10 @@ export function applyRevenuePayload(data) {
 function openEntrySheet({ title, kind = 'sale', entry = null } = {}) {
   const isRefund = kind === 'refund';
   const editing = !!entry;
+  const branchList = (state.session.account && state.session.account.branches) || [];
+  const branchOpts = [`<option value="">No branch</option>`]
+    .concat(branchList.map((b) => `<option value="${esc(b.id)}"${entry && entry.branchId === b.id ? ' selected' : ''}>${esc(b.name)}</option>`))
+    .join('');
   openSheet(`<h3>${esc(title)}</h3>
     <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 12px">${
       isRefund
@@ -41,6 +52,8 @@ function openEntrySheet({ title, kind = 'sale', entry = null } = {}) {
     <div class="field"><label>Amount</label><input id="revAmount" inputmode="decimal" placeholder="e.g. 2500" value="${esc(entry ? String(Math.abs(Number(entry.amount) || 0)) : '')}" autofocus/></div>
     <div class="field"><label>Note (optional)</label><input id="revNote" placeholder="${isRefund ? 'e.g. Returned order #104' : 'e.g. Walk-in sales'}" value="${esc((entry && entry.note) || '')}"/></div>
     <div class="field"><label>Category (optional)</label><input id="revCat" placeholder="e.g. Retail" value="${esc((entry && entry.category) || '')}"/></div>
+    <div class="field"><label>Branch</label><select id="revBranch" style="width:100%;font:inherit;font-size:14px;padding:12px 14px;border:1px solid var(--line-2);border-radius:11px;background:var(--surface);color:var(--ink)">${branchOpts}</select></div>
+    <div class="field"><label>When</label><input id="revWhen" type="datetime-local" value="${esc(entry && entry.createdAt ? toLocalInput(entry.createdAt) : '')}"/></div>
     <button class="btn" id="revSave">${editing ? 'Save changes' : (isRefund ? 'Log refund' : 'Add sale')}</button>
     ${editing ? '<button class="btn outline" id="revDel" style="margin-top:8px;color:var(--red)">Delete entry</button>' : ''}
     ${!editing ? `<button class="btn outline" id="revOther" style="margin-top:8px">${isRefund ? 'Add a sale instead' : 'Log a refund instead'}</button>` : ''}`);
@@ -50,31 +63,57 @@ function openEntrySheet({ title, kind = 'sale', entry = null } = {}) {
     const other = document.getElementById('revOther');
     if (other) other.onclick = () => openEntrySheet({ title: isRefund ? 'Add sale' : 'Log refund', kind: isRefund ? 'sale' : 'refund' });
     if (save) save.onclick = async () => {
+      if (inFlight) return;
+      const now = Date.now();
+      if (!editing && now - lastSubmitAt < 3000) {
+        toast('Slow down — duplicate sale blocked');
+        return;
+      }
       const amount = (document.getElementById('revAmount') || {}).value;
       const note = (document.getElementById('revNote') || {}).value;
       const category = (document.getElementById('revCat') || {}).value;
+      const branchId = (document.getElementById('revBranch') || {}).value || '';
+      const whenRaw = (document.getElementById('revWhen') || {}).value;
       const body = { amount, note, category, kind: editing ? (Number(amount) < 0 || (entry && entry.kind === 'refund') ? 'refund' : kind) : kind };
-      // When editing, respect explicit kind from sheet context if amount positive.
+      if (branchId) body.branchId = branchId;
+      else if (editing) body.branchId = '';
+      if (whenRaw) {
+        const ts = Date.parse(whenRaw);
+        if (Number.isFinite(ts)) body.createdAt = ts;
+      }
       if (editing) {
         body.kind = (entry.kind === 'refund' || isRefund) ? 'refund' : (entry.kind === 'adjustment' ? 'adjustment' : 'sale');
-        // If user is on refund sheet while editing, force refund.
         if (isRefund) body.kind = 'refund';
-      }
-      let status; let data;
-      if (editing) {
-        ({ status, data } = await api('/revenue/' + encodeURIComponent(entry.id), { method: 'PATCH', body }));
       } else {
-        ({ status, data } = await api('/revenue', { method: 'POST', body }));
+        body.clientRequestId = newClientRequestId();
+      }
+      inFlight = true;
+      save.disabled = true;
+      save.textContent = 'Saving…';
+      lastSubmitAt = now;
+      let status; let data;
+      try {
+        if (editing) {
+          ({ status, data } = await api('/revenue/' + encodeURIComponent(entry.id), { method: 'PATCH', body }));
+        } else {
+          ({ status, data } = await api('/revenue', { method: 'POST', body }));
+        }
+      } finally {
+        inFlight = false;
+        if (save) { save.disabled = false; save.textContent = editing ? 'Save changes' : (isRefund ? 'Log refund' : 'Add sale'); }
       }
       if (status === 201 || status === 200) {
         applyRevenuePayload(data);
         closeSheet();
         render();
         const t = data.total;
-        toast(editing ? 'Entry updated · total ' + money(t) : (isRefund ? 'Refund logged · total ' + money(t) : 'Sale added · total ' + money(t)));
+        toast(data.deduped
+          ? 'Duplicate ignored · total ' + money(t)
+          : (editing ? 'Entry updated · total ' + money(t) : (isRefund ? 'Refund logged · total ' + money(t) : 'Sale added · total ' + money(t))));
       } else toast((data && data.error) || 'Could not save');
     };
     if (del && entry) del.onclick = async () => {
+      if (!confirm('Delete this transaction? Net revenue will update immediately.')) return;
       const { status, data } = await api('/revenue/' + encodeURIComponent(entry.id), { method: 'DELETE' });
       if (status === 200) {
         applyRevenuePayload(data);
@@ -84,6 +123,13 @@ function openEntrySheet({ title, kind = 'sale', entry = null } = {}) {
       } else toast((data && data.error) || 'Could not delete');
     };
   }, 30);
+}
+
+function toLocalInput(ts) {
+  const d = new Date(Number(ts) || Date.now());
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function addRevenueSheet() {

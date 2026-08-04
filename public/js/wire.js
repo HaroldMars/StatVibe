@@ -26,6 +26,9 @@ import {
   editBusinessSheet, currencySheet, doUpgrade,
 } from './features/account.js';
 import { addRevenueSheet, addRefundSheet, editRevenueSheet } from './features/revenue.js';
+import {
+  openBranchWizard, geocodeAndFly, openBranchDrawer, loadBranches,
+} from './features/branches.js';
 
 export function wire(root) {
   // Bind the delegated click handler exactly once — #app persists across
@@ -163,11 +166,34 @@ export function bindClicks(root) {
 
       // AI workspace
       case 'toggleEngine': toggleEngine(t.dataset.id); break;
+      case 'selectModel': {
+        const sel = document.getElementById('aiModelSelect');
+        const id = (sel && sel.value) || t.dataset.id;
+        if (id) {
+          state.models.active = new Set([id]);
+          render();
+        }
+        break;
+      }
+      case 'branchCopilot': {
+        const list = (state.session.account && state.session.account.branches) || [];
+        const b = list.find((x) => x.id === t.dataset.id);
+        if (!b) { toast('Branch not found'); break; }
+        const q = `You are the StatVibe branch copilot. Branch "${b.name}" (${b.address || 'no address'}) has stock ${b.stockLevel}, threshold ${b.stockThreshold}, status ${b.supplyStatus}, daily revenue ${b.dailyRevenue}. Estimate days until stockout and recommend restock actions.`;
+        state.aiPrefill = q;
+        runWorkspace(q, 'Branch copilot · ' + b.name);
+        break;
+      }
       case 'cloudUnavail': toast(`${t.dataset.l} — Not available yet`); break;
       case 'toggleBlend': state.models.blend = !state.models.blend; state.settings.blend = state.models.blend; render(); break;
       case 'aiHistory': aiHistorySheet(); break;
       case 'runAI': { const p = ($('#aiPrompt') && $('#aiPrompt').value.trim()) || ''; if (!p) { toast('Type a prompt first'); break; } state.aiPrefill = ''; runWorkspace(p, titleFor(p)); break; }
       case 'runTask': runWorkspace(t.dataset.q, titleFor(t.dataset.q)); break;
+
+      // Map / branches
+      case 'addBranch': openBranchWizard({ lat: 14.5995, lng: 120.9842 }); break;
+      case 'mapGeocode': geocodeAndFly(); break;
+      case 'openBranch': openBranchDrawer(t.dataset.id); break;
 
       // AI output
       case 'refineAI': if (state.lastAIOutput) runWorkspace('Refine and tighten this document, keeping the same structure:\n\n' + state.lastAIOutput.content, state.lastAIOutput.title); break;
@@ -314,6 +340,15 @@ export function wireScreen(root) {
   const ap = $('#aiPrompt');
   if (ap) ap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { const p = ap.value.trim(); if (p) runWorkspace(p, titleFor(p)); } });
 
+  const modelSel = $('#aiModelSelect');
+  if (modelSel) {
+    modelSel.addEventListener('change', () => {
+      const id = modelSel.value;
+      if (!id) return;
+      state.models.active = new Set([id]);
+      toast('Model → ' + (modelSel.options[modelSel.selectedIndex].text || id));
+    });
+  }
   // Auth forms — Enter submits like Google / Instagram / banking apps.
   const loginForm = root.querySelector('#loginForm');
   if (loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
