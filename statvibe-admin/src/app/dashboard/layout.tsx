@@ -9,6 +9,8 @@ const links = [
   { href: '/dashboard', label: 'Overview' },
   { href: '/dashboard/users', label: 'Users' },
   { href: '/dashboard/transactions', label: 'Transactions' },
+  { href: '/dashboard/pricing', label: 'Pricing' },
+  { href: '/dashboard/announcements', label: 'Announcements' },
   { href: '/dashboard/employees', label: 'Employees', ceoOnly: true },
 ];
 

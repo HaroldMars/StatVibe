@@ -24,7 +24,15 @@ export function go(tab) {
     import('./features/branches.js').then((m) => m.teardownBranchMap()).catch(() => {});
   }
 }
-export function push(screen, params = {}) { state.stack.push({ screen, params }); render(); }
+export function push(screen, params = {}) {
+  state.stack.push({ screen, params });
+  render();
+  if (screen === 'plans') {
+    import('./features/account.js').then((m) => m.loadBillingCatalog().then(() => {
+      if (state.stack.length && state.stack[state.stack.length - 1].screen === 'plans') render();
+    })).catch(() => {});
+  }
+}
 export function back() { state.stack.pop(); render(); }
 
 function splashScreen() {

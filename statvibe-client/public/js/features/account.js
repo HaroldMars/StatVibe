@@ -236,10 +236,49 @@ export function currencySheet() {
 }
 
 /* ---- Plans ---- */
+export async function loadBillingCatalog() {
+  const { status, data } = await api('/billing/catalog', { auth: !!state.session.token });
+  if (status === 200) {
+    state.billingCatalog = data;
+    return data;
+  }
+  return null;
+}
+
 export async function doUpgrade(name) {
   if (name === 'Enterprise') { toast('Enterprise — our team will reach out'); return; }
   if (name === 'Free' || name === state.plan) { toast(name === state.plan ? 'Already on this plan' : 'You are on Free'); return; }
-  const { status, data } = await api('/account/upgrade', { method: 'POST', body: { plan: name } });
+
+  toast('Preparing checkout…');
+  let { status, data } = await api('/billing/checkout', { method: 'POST', body: { plan: name } });
+
+  if (status === 200 && data.checkoutUrl) {
+    window.location.href = data.checkoutUrl;
+    return;
+  }
+
+  // PayMongo unset — demo activation (local/dev) so upgrades still work.
+  if (status === 200 && data.configured === false) {
+    ({ status, data } = await api('/billing/checkout', { method: 'POST', body: { plan: name, demoActivate: true } }));
+  }
+
+  if (status === 200 && (data.account || data.demo)) {
+    if (data.account) {
+      state.session.account = data.account;
+      state.plan = data.account.plan || name;
+    } else {
+      state.plan = name;
+    }
+    const q = data.quote;
+    render();
+    toast(q
+      ? `Upgraded to ${name} · ${usdLabel(q.display.total)} incl. VAT`
+      : `Upgraded to ${name}`);
+    return;
+  }
+
+  // Legacy fallback
+  ({ status, data } = await api('/account/upgrade', { method: 'POST', body: { plan: name } }));
   if (status === 200) {
     state.session.account = data.account;
     state.plan = name;
@@ -254,5 +293,9 @@ export async function doUpgrade(name) {
       };
     } else if (data.usageLimit) state.usage.limit = data.usageLimit;
     render(); toast(`Upgraded to ${name}`);
-  } else toast(data.error || 'Upgrade failed');
+  } else toast((data && data.error) || 'Upgrade failed');
+}
+
+function usdLabel(n) {
+  return '$' + Number(n || 0).toFixed(2);
 }

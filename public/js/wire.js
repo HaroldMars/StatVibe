@@ -24,7 +24,7 @@ import {
 import { addItemSheet, predictItem, itemMenu, updateCalc } from './features/inventory.js';
 import {
   downloadSheet, exportData, qrSheet, shareQRCode, paymentSheet, deleteAccountConfirm,
-  editBusinessSheet, currencySheet, doUpgrade,
+  editBusinessSheet, currencySheet, doUpgrade, loadBillingCatalog,
 } from './features/account.js';
 import { addRevenueSheet, addRefundSheet, editRevenueSheet } from './features/revenue.js';
 import {
@@ -109,7 +109,10 @@ export function bindClicks(root) {
       case 'predictItem': predictItem(t.dataset.id); break;
       case 'itemMenu': itemMenu(t.dataset.id); break;
 
-      case 'goto': push(t.dataset.s); break;
+      case 'goto':
+        push(t.dataset.s);
+        if (t.dataset.s === 'plans') loadBillingCatalog().then(() => render());
+        break;
       case 'gotoTab': go(t.dataset.tab); break;
       case 'openAlert': if (t.dataset.s === 'agent') { state.authed && (state.stack = []); go('agent'); } else if (t.dataset.s) go(t.dataset.s); break;
       case 'editIdea': editIdea(t.dataset.id); break;

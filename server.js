@@ -11,6 +11,7 @@ const auth = require('./lib/auth');
 const usageLib = require('./lib/usage');
 const revenueLib = require('./lib/revenue');
 const branchLib = require('./lib/branches');
+const { attachBillingRoutes } = require('./lib/billing-api');
 const { PLAN_LIMITS, PLAN_PRICES, ensureUsage, usageView, canConsume, billTokens, countMessageTokens } = usageLib;
 const { sanitizeEntry, sanitizeEntries, migrateAccountRevenue, totalRevenue } = revenueLib;
 
@@ -563,6 +564,17 @@ async function handleAdmin(req, res, sub, body) {
     config = { ...DEFAULT_CONFIG, cloudAvailable: {} }; saveConfig(); log('info', 'admin reset config');
     return sendJSON(res, 200, { ok: true, config });
   }
+
+  // Billing / pricing / announcements (delegated)
+  if (sub === 'billing' || sub.startsWith('billing/')) {
+    const rest = sub === 'billing' ? '' : sub.slice('billing/'.length);
+    return billingHandlers.handleAdminBilling(req, res, rest, body, admin);
+  }
+  if (sub === 'notifications' || sub.startsWith('notifications/')) {
+    const rest = sub === 'notifications' ? '' : sub.slice('notifications/'.length);
+    return billingHandlers.handleAdminNotifications(req, res, rest, body, admin);
+  }
+
   return sendJSON(res, 404, { error: 'Unknown admin endpoint' });
 }
 
@@ -1365,7 +1377,21 @@ async function requestHandler(req, res) {
     if (p.startsWith('/api/ai/')) return handleAIHistory(req, res, p.slice('/api/ai/'.length), ['POST'].includes(req.method) ? await readBody(req) : null);
     if (p === '/api/conversations' || p.startsWith('/api/conversations/')) return handleConversations(req, res, p === '/api/conversations' ? '' : p.slice('/api/conversations'.length), ['POST', 'PATCH'].includes(req.method) ? await readBody(req) : null);
     if (p.startsWith('/api/pay/')) return handlePay(req, res, p.slice('/api/pay/'.length), req.method === 'POST' ? await readBody(req) : null);
-    if (p.startsWith('/api/admin/')) return handleAdmin(req, res, p.slice('/api/admin/'.length), req.method === 'POST' ? await readBody(req) : null);
+    if (p === '/api/webhooks/paymongo' && req.method === 'POST') {
+      return billingHandlers.handlePaymongoWebhook(req, res, await readBody(req));
+    }
+    if (p === '/api/notifications' || p.startsWith('/api/notifications/')) {
+      return billingHandlers.handlePublicNotifications(req, res);
+    }
+    if (p === '/api/billing' || p.startsWith('/api/billing/')) {
+      const sub = p === '/api/billing' ? '' : p.slice('/api/billing/'.length);
+      return billingHandlers.handleBilling(req, res, sub, ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : null);
+    }
+    if (p.startsWith('/api/admin/')) {
+      const sub = p.slice('/api/admin/'.length);
+      const needsBody = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+      return handleAdmin(req, res, sub, needsBody ? await readBody(req) : null);
+    }
     if (p.startsWith('/api/')) return sendJSON(res, 404, { error: 'Unknown endpoint' });
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
@@ -1382,6 +1408,17 @@ async function requestHandler(req, res) {
 // Runs once per process (and per Vercel cold start): load config + seed founder.
 loadConfig();
 const ready = seedFounder().catch((e) => log('error', 'seedFounder: ' + e.message));
+
+const billingHandlers = attachBillingRoutes({
+  store,
+  auth,
+  usageLib,
+  sendJSON,
+  parseJSON,
+  getAuthUser,
+  requireAdmin: async (req) => adminFromReq(req),
+  readRawBody: readBody,
+});
 
 const server = http.createServer(requestHandler);
 

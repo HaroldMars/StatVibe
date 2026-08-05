@@ -5,7 +5,7 @@
    ========================================================================== */
 'use strict';
 
-const S = { token: null, admin: null, summary: null, admins: null, users: null, payments: null, testOut: null, busy: false };
+const S = { token: null, admin: null, summary: null, admins: null, users: null, payments: null, billing: null, notifications: null, testOut: null, busy: false };
 const $ = (s, r = document) => r.querySelector(s);
 const el = () => document.getElementById('adm');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -174,6 +174,9 @@ function consoleView() {
       : '<div style="font-size:12px;color:var(--muted-2)">No upgrades or payments yet. Plan upgrades from the app appear here.</div>'}
   </div>
 
+  ${billingCard()}
+  ${notificationsCard()}
+
   <div class="adm-card">
     <p class="adm-eyebrow">Raw AI test console</p>
     <textarea id="admPrompt" rows="2" style="width:100%;border:1px solid var(--line-2);border-radius:9px;padding:10px;font-size:13px;background:var(--surface);color:var(--ink);resize:none;outline:none">What is our gross margin trend?</textarea>
@@ -191,6 +194,78 @@ function consoleView() {
   <div class="adm-grid">
     <button class="btn outline" data-a="resetCfg">Reset server config</button>
     <a class="btn outline" href="/" style="text-align:center;line-height:1.4">Open StatVibe app →</a>
+  </div>`;
+}
+
+function money2(n) {
+  return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function billingCard() {
+  const b = S.billing || {};
+  const cfg = b.config || { tiers: {}, betaSaleEnabled: true, vatRate: 0.12 };
+  const preview = b.preview || {};
+  const pro = (cfg.tiers && cfg.tiers.Pro) || {};
+  const biz = (cfg.tiers && cfg.tiers.Business) || {};
+  const pq = preview.Pro || {};
+  const bq = preview.Business || {};
+  return `
+  <div class="adm-card">
+    <p class="adm-eyebrow">Subscription pricing · Beta sale · 12% VAT excluded from base</p>
+    <div class="adm-row"><span>Beta sale / promo discounts</span>
+      <button class="toggle ${cfg.betaSaleEnabled ? 'on' : ''}" data-a="toggleBeta"></button>
+    </div>
+    <div class="adm-grid" style="gap:12px;margin-top:12px">
+      <div>
+        <p class="adm-eyebrow">Pro</p>
+        <label style="font-size:11px;color:var(--muted-2)">Base ($)</label>
+        <input id="proBase" type="number" step="0.01" value="${((pro.basePriceCents || 2000) / 100).toFixed(2)}" style="width:100%;padding:10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);margin-bottom:8px" />
+        <label style="font-size:11px;color:var(--muted-2)">Sale ($)</label>
+        <input id="proSale" type="number" step="0.01" value="${((pro.salePriceCents || 1000) / 100).toFixed(2)}" style="width:100%;padding:10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);margin-bottom:8px" />
+        <div class="adm-row"><span style="font-size:12px">Sale active</span><button class="toggle ${pro.saleActive !== false ? 'on' : ''}" data-a="toggleTierSale" data-tier="Pro"></button></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.45">Checkout preview: ${money2((pq.display && pq.display.subtotal) || 0)} + VAT ${money2((pq.display && pq.display.vat) || 0)} = <b>${money2((pq.display && pq.display.total) || 0)}</b></div>
+      </div>
+      <div>
+        <p class="adm-eyebrow">Business</p>
+        <label style="font-size:11px;color:var(--muted-2)">Base ($)</label>
+        <input id="bizBase" type="number" step="0.01" value="${((biz.basePriceCents || 7900) / 100).toFixed(2)}" style="width:100%;padding:10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);margin-bottom:8px" />
+        <label style="font-size:11px;color:var(--muted-2)">Sale ($)</label>
+        <input id="bizSale" type="number" step="0.01" value="${((biz.salePriceCents || 4900) / 100).toFixed(2)}" style="width:100%;padding:10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);margin-bottom:8px" />
+        <div class="adm-row"><span style="font-size:12px">Sale active</span><button class="toggle ${biz.saleActive !== false ? 'on' : ''}" data-a="toggleTierSale" data-tier="Business"></button></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.45">Checkout preview: ${money2((bq.display && bq.display.subtotal) || 0)} + VAT ${money2((bq.display && bq.display.vat) || 0)} = <b>${money2((bq.display && bq.display.total) || 0)}</b></div>
+      </div>
+    </div>
+    <button class="btn sm" data-a="savePricing" style="margin-top:12px;width:auto;padding:9px 16px">Save pricing</button>
+    <div style="font-size:11px;color:var(--muted-3);margin-top:10px;line-height:1.45">Changes apply to <code>/api/billing/catalog</code> immediately (no redeploy). PayMongo charges PHP via <code>USD_PHP_RATE</code>.</div>
+  </div>`;
+}
+
+function notificationsCard() {
+  const list = S.notifications || [];
+  return `
+  <div class="adm-card">
+    <p class="adm-eyebrow">System announcements · in-app / email triggers</p>
+    <div class="adm-grid" style="gap:8px">
+      <input id="ntTitle" placeholder="Title" style="padding:11px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink)" />
+      <select id="ntCat" style="padding:11px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink)">
+        <option value="sale">Big Sale / Promo</option>
+        <option value="maintenance">Scheduled Maintenance</option>
+        <option value="system_update">System Update</option>
+        <option value="urgent">Urgent Alert</option>
+      </select>
+    </div>
+    <textarea id="ntBody" rows="2" placeholder="Announcement body" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);resize:vertical"></textarea>
+    <div class="adm-grid" style="gap:8px;margin-top:8px">
+      <input id="ntCta" placeholder="CTA label (optional)" style="padding:11px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink)" />
+      <input id="ntUrl" placeholder="CTA URL (e.g. /#plans)" style="padding:11px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink)" />
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px"><input type="checkbox" id="ntDismiss" checked /> Dismissible</label>
+    <button class="btn sm" data-a="createNote" style="margin-top:10px;width:auto;padding:9px 16px">Broadcast</button>
+    <div style="margin-top:14px">
+      ${list.length
+        ? list.map((n) => `<div class="adm-row" style="align-items:flex-start"><div><div style="font-weight:600;font-size:13px">${esc(n.title)} <span class="tagchip">${esc(n.category)}</span></div><div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(n.body)}</div></div><button class="pill" data-a="delNote" data-id="${esc(n.id)}" style="color:var(--red)">Remove</button></div>`).join('')
+        : '<div style="font-size:12px;color:var(--muted-2)">No announcements yet.</div>'}
+    </div>
   </div>`;
 }
 
@@ -230,6 +305,8 @@ async function refresh() {
     S.summary = data;
     const u = await apiAdmin('users'); if (u.status === 200) S.users = u.data.users;
     const p = await apiAdmin('payments'); if (p.status === 200) S.payments = p.data.payments;
+    const bill = await apiAdmin('billing/subscriptions-config'); if (bill.status === 200) S.billing = bill.data;
+    const notes = await apiAdmin('notifications'); if (notes.status === 200) S.notifications = notes.data.notifications;
     if (S.admin && S.admin.role === 'founder') { const a = await apiAdmin('accounts'); if (a.status === 200) S.admins = a.data.admins; }
     render();
   } else { logout(); }
@@ -253,6 +330,54 @@ async function delAdmin(username) {
   if (status === 200) { S.admins = data.admins; render(); toast('Removed ' + username); } else toast(data.error || 'Could not remove');
 }
 
+async function savePricing() {
+  const proBase = Math.round(Number(($('#proBase') || {}).value) * 100);
+  const proSale = Math.round(Number(($('#proSale') || {}).value) * 100);
+  const bizBase = Math.round(Number(($('#bizBase') || {}).value) * 100);
+  const bizSale = Math.round(Number(($('#bizSale') || {}).value) * 100);
+  const cfg = (S.billing && S.billing.config) || { tiers: {} };
+  const { status, data } = await apiAdmin('billing/subscriptions-config', {
+    method: 'PUT',
+    body: {
+      betaSaleEnabled: cfg.betaSaleEnabled !== false,
+      tiers: {
+        Pro: {
+          ...(cfg.tiers && cfg.tiers.Pro),
+          basePriceCents: proBase,
+          salePriceCents: proSale,
+          saleActive: !!(cfg.tiers && cfg.tiers.Pro && cfg.tiers.Pro.saleActive !== false),
+        },
+        Business: {
+          ...(cfg.tiers && cfg.tiers.Business),
+          basePriceCents: bizBase,
+          salePriceCents: bizSale,
+          saleActive: !!(cfg.tiers && cfg.tiers.Business && cfg.tiers.Business.saleActive !== false),
+        },
+      },
+    },
+  });
+  if (status === 200) { S.billing = data; render(); toast('Pricing saved — live on checkout'); }
+  else toast((data && data.error) || 'Save failed');
+}
+
+async function createNote() {
+  const title = ($('#ntTitle') || {}).value;
+  const body = ($('#ntBody') || {}).value;
+  const category = ($('#ntCat') || {}).value;
+  const ctaLabel = ($('#ntCta') || {}).value;
+  const ctaUrl = ($('#ntUrl') || {}).value;
+  const dismissible = !!(($('#ntDismiss') || {}).checked);
+  const { status, data } = await apiAdmin('notifications', {
+    method: 'POST',
+    body: { title, body, category, channels: ['in_app'], ctaLabel: ctaLabel || null, ctaUrl: ctaUrl || null, dismissible, active: true },
+  });
+  if (status === 201) {
+    const notes = await apiAdmin('notifications');
+    if (notes.status === 200) S.notifications = notes.data.notifications;
+    render(); toast('Announcement published');
+  } else toast((data && data.error) || 'Failed');
+}
+
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-a]'); if (!b) return;
   const a = b.dataset.a;
@@ -266,6 +391,25 @@ document.addEventListener('click', (e) => {
   if (a === 'resetCfg') return apiAdmin('reset', { method: 'POST' }).then(() => { refresh(); toast('Config reset'); });
   if (a === 'addAdmin') return addAdmin();
   if (a === 'delAdmin') return delAdmin(b.dataset.u);
+  if (a === 'savePricing') return savePricing();
+  if (a === 'createNote') return createNote();
+  if (a === 'delNote') return apiAdmin('notifications/' + b.dataset.id, { method: 'DELETE' }).then(() => refresh());
+  if (a === 'toggleBeta') {
+    const cur = !!(S.billing && S.billing.config && S.billing.config.betaSaleEnabled);
+    return apiAdmin('billing/subscriptions-config', { method: 'PUT', body: { betaSaleEnabled: !cur } }).then((r2) => {
+      if (r2.status === 200) { S.billing = r2.data; render(); toast('Beta sale ' + (r2.data.config.betaSaleEnabled ? 'on' : 'off')); }
+    });
+  }
+  if (a === 'toggleTierSale') {
+    const tier = b.dataset.tier;
+    const cur = !!(S.billing && S.billing.config && S.billing.config.tiers && S.billing.config.tiers[tier] && S.billing.config.tiers[tier].saleActive !== false);
+    return apiAdmin('billing/subscriptions-config', {
+      method: 'PUT',
+      body: { tiers: { [tier]: { saleActive: !cur } } },
+    }).then((r) => {
+      if (r.status === 200) { S.billing = r.data; render(); toast(tier + ' sale ' + (r.data.config.tiers[tier].saleActive ? 'on' : 'off')); }
+    });
+  }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && $('#admP')) login(); });
 

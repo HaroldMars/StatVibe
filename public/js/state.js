@@ -11,6 +11,8 @@ export const state = {
   predictions: {},   // itemId -> prediction result cache
   models: { engines: [], cloud: [], workspace: [], ollamaOnline: false, active: new Set(), blend: true, loaded: false },
   plan: 'Free',
+  billingCatalog: null,
+  systemNotifications: [],
   usage: { used: 0, limit: 50000, resetDays: 7, period: 'week', resetAt: null },
   statsDraft: { revenue: '', products: '', avgPrice: '' },
   aiPrefill: '',

@@ -39,7 +39,7 @@ export default function TransactionsPage() {
         <Card className="border-[#dde3f5]"><CardHeader><CardDescription>Gross revenue</CardDescription><CardTitle className="tabular-nums">{formatMoney((metrics?.revenueCents || 0) / 100)}</CardTitle></CardHeader></Card>
         <Card className="border-[#dde3f5]"><CardHeader><CardDescription>Succeeded</CardDescription><CardTitle className="tabular-nums">{metrics?.succeeded ?? '—'}</CardTitle></CardHeader></Card>
         <Card className="border-[#dde3f5]"><CardHeader><CardDescription>Pro payments</CardDescription><CardTitle className="tabular-nums">{metrics?.byPlan?.Pro ?? '—'}</CardTitle></CardHeader></Card>
-        <Card className="border-[#dde3f5]"><CardHeader><CardDescription>Enterprise payments</CardDescription><CardTitle className="tabular-nums">{metrics?.byPlan?.Enterprise ?? '—'}</CardTitle></CardHeader></Card>
+        <Card className="border-[#dde3f5]"><CardHeader><CardDescription>Business payments</CardDescription><CardTitle className="tabular-nums">{metrics?.byPlan?.Business ?? '—'}</CardTitle></CardHeader></Card>
       </div>
 
       <Card className="border-[#dde3f5]">

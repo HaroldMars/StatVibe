@@ -29,7 +29,13 @@ export function applyHash() {
   const tabs = ['stats', 'map', 'calc', 'hub', 'ai', 'agent'];
   const subs = ['plans', 'settings', 'profile', 'security', 'alerts', 'revenue', 'aiOutput'];
   if (tabs.includes(h)) go(h);
-  else if (subs.includes(h)) { state.stack = [{ screen: h, params: {} }]; render(); }
+  else if (subs.includes(h)) {
+    state.stack = [{ screen: h, params: {} }];
+    render();
+    if (h === 'plans') {
+      import('./features/account.js').then((m) => m.loadBillingCatalog().then(() => render())).catch(() => {});
+    }
+  }
 }
 
 function sleep(ms) {
