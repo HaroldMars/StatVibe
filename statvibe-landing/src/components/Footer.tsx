@@ -79,18 +79,23 @@ export function Footer() {
             <p className="mb-2 font-medium text-leaf-950">Social</p>
             <ul className="space-y-1.5 text-moss-500">
               <li>
-                <a className="hover:text-leaf-600" href="https://twitter.com" target="_blank" rel="noreferrer">
-                  X / Twitter
+                <a
+                  className="hover:text-leaf-600"
+                  href="https://www.facebook.com/people/StatVibe/61592473247244/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Facebook · StatVibe
                 </a>
               </li>
               <li>
                 <a
                   className="hover:text-leaf-600"
-                  href="https://github.com/HaroldMars/StatVibe"
+                  href="https://www.instagram.com/statvibe_beta"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  GitHub
+                  Instagram · StatVibe Beta
                 </a>
               </li>
             </ul>
