@@ -103,12 +103,22 @@ export default function PricingPage() {
   }
 
   function patchTier(id: string, patch: Partial<Tier>) {
-    setConfig({
-      ...config,
-      tiers: {
-        ...config.tiers,
-        [id]: { ...config.tiers[id], ...patch },
-      },
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const current = prev.tiers[id] || {
+        id,
+        label: id,
+        basePriceCents: 0,
+        salePriceCents: 0,
+        saleActive: false,
+      };
+      return {
+        ...prev,
+        tiers: {
+          ...prev.tiers,
+          [id]: { ...current, ...patch, id },
+        },
+      };
     });
   }
 
