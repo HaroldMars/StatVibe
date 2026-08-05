@@ -321,6 +321,32 @@ screens.admin = () => {
   </div>`;
 };
 
+function usd(n) {
+  return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function planCardFromQuote(name, desc, { pop = false } = {}) {
+  const cat = state.billingCatalog;
+  const q = cat && cat.quotes && cat.quotes[name];
+  const saleOn = cat && cat.betaSaleEnabled && q && q.saleApplied;
+  let priceHtml;
+  let vatLine = '';
+  if (name === 'Free') {
+    priceHtml = `<span class="mono" style="font-size:${pop ? 22 : 17}px;font-weight:600">$0</span>`;
+  } else if (name === 'Enterprise') {
+    priceHtml = `<span class="mono" style="font-size:${pop ? 22 : 17}px;font-weight:600">Custom</span>`;
+  } else if (q) {
+    const main = usd(q.display.subtotal);
+    const struck = saleOn ? `<span style="text-decoration:line-through;opacity:.55;font-size:13px;margin-right:6px">${usd(q.display.base)}</span>` : '';
+    priceHtml = `${struck}<span class="mono" style="font-size:${pop ? 22 : 17}px;font-weight:600">${main}</span><span style="font-size:12px;opacity:.7">/mo</span>`;
+    vatLine = `<div style="font-size:11px;margin-top:4px;opacity:.75">+ 12% VAT ${usd(q.display.vat)} · total ${usd(q.display.total)}</div>`;
+  } else {
+    priceHtml = `<span class="mono" style="font-size:${pop ? 22 : 17}px;font-weight:600">…</span>`;
+  }
+  const badge = saleOn ? `<span class="tagchip" style="margin-left:8px;background:var(--amber);color:#1a1200">Beta sale</span>` : '';
+  return { priceHtml, vatLine, badge };
+}
+
 screens.plans = () => {
   const u = state.usage;
   const limit = u.limit || 50000;
@@ -330,16 +356,20 @@ screens.plans = () => {
   const resetLabel = u.resetDays == null
     ? 'no reset needed'
     : `resets in ${u.resetDays} day${u.resetDays === 1 ? '' : 's'}`;
+  const saleBanner = state.billingCatalog && state.billingCatalog.betaSaleEnabled
+    ? `<div class="card mb-14" style="border-color:var(--teal);background:var(--teal-tint)"><div style="font-size:13px;font-weight:650;color:var(--teal-deep)">Beta sale</div><div style="font-size:12px;color:var(--ink-2);margin-top:4px;line-height:1.45">First-time subscribers: Pro $10 · Business $49 (VAT excluded from list price; 12% added at checkout).</div></div>`
+    : '';
   const plans = [
-    { name: 'Free', price: '₱0', desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
-    { name: 'Pro', price: '₱1,699', per: '/mo', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub' },
-    { name: 'Business', price: '₱4,499', per: '/mo', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting' },
-    { name: 'Enterprise', price: 'Custom', desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
+    { name: 'Free', desc: '50,000 AI tokens per week · core dashboard & calculator · weekly reset' },
+    { name: 'Pro', desc: '1,000,000 AI tokens / month · 3 workspaces · project hub' },
+    { name: 'Business', pop: true, desc: '5,000,000 AI tokens / month · all models & Blend · AgentTech · forecasting' },
+    { name: 'Enterprise', desc: 'Unlimited tokens · SSO · audit logs · dedicated support & SLAs' },
   ];
   return `
   ${appbar('Plans')}
   <div class="scroll pad" style="padding-top:6px">
     <div class="mb-14"><div class="h-page">Plans</div><div class="sub">Scale usage as you grow · current: ${state.plan}</div></div>
+    ${saleBanner}
     <div class="card mb-14">
       <div class="row-between mb-8"><span style="font-size:12.5px;font-weight:600">${state.plan} plan · this ${period}</span><span style="font-size:11px;color:var(--amber);font-weight:600">${pct}% used</span></div>
       <div class="meter mb-8" style="margin-bottom:5px"><i style="width:${pct}%;background:linear-gradient(90deg,var(--teal),#E0A030)"></i></div>
@@ -347,18 +377,26 @@ screens.plans = () => {
       ${pct >= 100 ? `<button class="btn sm mint" data-act="goto" data-s="plans" style="margin-top:12px">Upgrade to keep using AI</button>` : ''}
     </div>
     <div class="stack gap-10">
-      ${plans.map((p) => p.pop ? `
+      ${plans.map((p) => {
+        const { priceHtml, vatLine, badge } = planCardFromQuote(p.name, p.desc, { pop: !!p.pop });
+        if (p.pop) {
+          return `
         <div class="card dark" style="border:1.5px solid var(--teal);position:relative;padding:16px">
           <span class="tagchip" style="position:absolute;top:-9px;left:16px;background:var(--teal);color:#fff">Most popular</span>
-          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:22px;font-weight:600">${p.price}</span><span style="font-size:12px;color:#9FBAB2">${p.per}</span></div></div>
+          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}${badge}</div><div>${priceHtml}</div></div>
+          ${vatLine.replace('opacity:.75', 'color:#9FBAB2')}
           <div style="font-size:12px;color:#C3D6D0;margin:8px 0 12px;line-height:1.55">${p.desc}</div>
           <button class="btn mint sm" data-act="upgrade" data-p="${p.name}" style="padding:11px">${state.plan === p.name ? 'Current plan' : 'Upgrade to ' + p.name}</button>
-        </div>` : `
+        </div>`;
+        }
+        return `
         <button class="card" data-act="choosePlan" data-p="${p.name}" style="text-align:left;cursor:pointer">
-          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}</div><div><span class="mono" style="font-size:17px;font-weight:600">${p.price}</span><span style="font-size:12px;color:var(--muted-2)">${p.per || ''}</span></div></div>
+          <div class="row-between" style="align-items:baseline"><div style="font-size:15px;font-weight:700">${p.name}${badge}</div><div>${priceHtml}</div></div>
+          ${vatLine}
           <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5">${p.desc}</div>
           ${state.plan === p.name ? '<div style="font-size:11px;color:var(--teal);font-weight:600;margin-top:8px">Current plan</div>' : ''}
-        </button>`).join('')}
+        </button>`;
+      }).join('')}
     </div>
   </div>`;
 };

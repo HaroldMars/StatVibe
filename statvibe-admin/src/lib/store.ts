@@ -37,6 +37,34 @@ type StoreShape = {
   admins: AdminAccount[];
   users: AppUser[];
   transactions: Transaction[];
+  subscriptionsConfig: {
+    betaSaleEnabled: boolean;
+    vatRate: number;
+    currency: string;
+    tiers: Record<string, {
+      id: string;
+      label: string;
+      basePriceCents: number;
+      salePriceCents: number;
+      saleActive: boolean;
+      discountPercent: number;
+    }>;
+  };
+  systemNotifications: Array<{
+    id: string;
+    title: string;
+    body: string;
+    category: string;
+    target: string;
+    channels: string[];
+    startsAt: number;
+    endsAt: number | null;
+    dismissible: boolean;
+    ctaLabel: string | null;
+    ctaUrl: string | null;
+    active: boolean;
+    createdAt: number;
+  }>;
   seeded: boolean;
 };
 
@@ -46,7 +74,24 @@ declare global {
 }
 
 function blank(): StoreShape {
-  return { admins: [], users: [], transactions: [], seeded: false };
+  return {
+    admins: [],
+    users: [],
+    transactions: [],
+    subscriptionsConfig: {
+      betaSaleEnabled: true,
+      vatRate: 0.12,
+      currency: 'USD',
+      tiers: {
+        Free: { id: 'Free', label: 'Free', basePriceCents: 0, salePriceCents: 0, saleActive: false, discountPercent: 0 },
+        Pro: { id: 'Pro', label: 'Pro', basePriceCents: 2000, salePriceCents: 1000, saleActive: true, discountPercent: 50 },
+        Business: { id: 'Business', label: 'Business', basePriceCents: 7900, salePriceCents: 4900, saleActive: true, discountPercent: 38 },
+        Enterprise: { id: 'Enterprise', label: 'Enterprise', basePriceCents: 0, salePriceCents: 0, saleActive: false, discountPercent: 0 },
+      },
+    },
+    systemNotifications: [],
+    seeded: false,
+  };
 }
 
 export function getStore(): StoreShape {
@@ -93,7 +138,7 @@ export async function ensureSeeded() {
     'Lucas Meyer', 'Emma Dubois', 'Oliver Park', 'Isabella Cruz', 'Mason Wright',
   ];
   const statuses: UserStatus[] = ['APPROVED', 'APPROVED', 'APPROVED', 'PENDING', 'SUSPENDED', 'APPROVED', 'PENDING', 'APPROVED'];
-  const plans: PlanId[] = ['Free', 'Pro', 'Enterprise', 'Pro', 'Free', 'Pro', 'Free', 'Enterprise'];
+  const plans: PlanId[] = ['Free', 'Pro', 'Business', 'Pro', 'Free', 'Business', 'Free', 'Enterprise'];
 
   store.users = names.map((name, i) => {
     const status = statuses[i % statuses.length];
@@ -111,10 +156,10 @@ export async function ensureSeeded() {
   });
 
   const txs: Transaction[] = [];
-  const amounts: Record<PlanId, number> = { Free: 0, Pro: 1699, Enterprise: 4499 };
+  const amounts: Record<PlanId, number> = { Free: 0, Pro: 1120, Business: 5488, Enterprise: 0 };
   for (let i = 0; i < 64; i++) {
     const user = store.users[i % store.users.length];
-    const plan = (['Pro', 'Enterprise', 'Pro', 'Free', 'Pro'] as PlanId[])[i % 5];
+    const plan = (['Pro', 'Business', 'Pro', 'Free', 'Business'] as PlanId[])[i % 5];
     const status: TxStatus = (['succeeded', 'succeeded', 'succeeded', 'pending', 'failed', 'refunded'] as TxStatus[])[i % 6];
     txs.push({
       id: `txn_${1000 + i}`,
@@ -203,4 +248,91 @@ export async function getOverview() {
     .filter((t) => t.status === 'succeeded')
     .reduce((sum, t) => sum + t.amount, 0);
   return { totalUsers, activeUsers, pendingApprovals, totalRevenue };
+}
+
+function quoteTier(tier: StoreShape['subscriptionsConfig']['tiers'][string], betaSaleEnabled: boolean, vatRate: number) {
+  const saleOn = !!(betaSaleEnabled && tier.saleActive && tier.salePriceCents > 0 && tier.salePriceCents < tier.basePriceCents);
+  const subtotalCents = saleOn ? tier.salePriceCents : tier.basePriceCents;
+  const vatCents = Math.round(subtotalCents * vatRate);
+  return {
+    plan: tier.id,
+    subtotalCents,
+    vatCents,
+    totalCents: subtotalCents + vatCents,
+    saleApplied: saleOn,
+    display: {
+      base: tier.basePriceCents / 100,
+      sale: tier.salePriceCents / 100,
+      subtotal: subtotalCents / 100,
+      vat: vatCents / 100,
+      total: (subtotalCents + vatCents) / 100,
+    },
+  };
+}
+
+export async function getSubscriptionsConfig() {
+  const store = await ensureSeeded();
+  const config = store.subscriptionsConfig;
+  const preview: Record<string, ReturnType<typeof quoteTier>> = {};
+  for (const [id, tier] of Object.entries(config.tiers)) {
+    preview[id] = quoteTier(tier, config.betaSaleEnabled, config.vatRate);
+  }
+  return { config, preview };
+}
+
+export async function setSubscriptionsConfig(patch: Partial<StoreShape['subscriptionsConfig']> & { tiers?: Record<string, Partial<StoreShape['subscriptionsConfig']['tiers'][string]>> }) {
+  const store = await ensureSeeded();
+  if (typeof patch.betaSaleEnabled === 'boolean') store.subscriptionsConfig.betaSaleEnabled = patch.betaSaleEnabled;
+  if (patch.vatRate != null) store.subscriptionsConfig.vatRate = Number(patch.vatRate);
+  if (patch.tiers) {
+    for (const [id, t] of Object.entries(patch.tiers)) {
+      store.subscriptionsConfig.tiers[id] = {
+        ...store.subscriptionsConfig.tiers[id],
+        ...t,
+        id,
+      };
+    }
+  }
+  return getSubscriptionsConfig();
+}
+
+export async function listSystemNotifications() {
+  const store = await ensureSeeded();
+  return [...store.systemNotifications].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function createSystemNotification(input: {
+  title: string;
+  body: string;
+  category: string;
+  channels?: string[];
+  dismissible?: boolean;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  active?: boolean;
+}) {
+  const store = await ensureSeeded();
+  const note = {
+    id: `ntf_${randomUUID().slice(0, 8)}`,
+    title: input.title.trim(),
+    body: input.body.trim(),
+    category: input.category || 'system_update',
+    target: 'all',
+    channels: input.channels || ['in_app'],
+    startsAt: Date.now(),
+    endsAt: null as number | null,
+    dismissible: input.dismissible !== false,
+    ctaLabel: input.ctaLabel || null,
+    ctaUrl: input.ctaUrl || null,
+    active: input.active !== false,
+    createdAt: Date.now(),
+  };
+  store.systemNotifications.unshift(note);
+  return note;
+}
+
+export async function deleteSystemNotification(id: string) {
+  const store = await ensureSeeded();
+  store.systemNotifications = store.systemNotifications.filter((n) => n.id !== id);
+  return { ok: true };
 }

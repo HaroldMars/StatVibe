@@ -12,6 +12,7 @@ export async function GET() {
     const byPlan = {
       Free: succeeded.filter((t) => t.plan === 'Free').length,
       Pro: succeeded.filter((t) => t.plan === 'Pro').length,
+      Business: succeeded.filter((t) => t.plan === 'Business').length,
       Enterprise: succeeded.filter((t) => t.plan === 'Enterprise').length,
     };
     return NextResponse.json({

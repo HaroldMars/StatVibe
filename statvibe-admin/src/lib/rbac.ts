@@ -6,7 +6,7 @@ export const ROLES = {
 export type AdminRole = (typeof ROLES)[keyof typeof ROLES];
 
 export type UserStatus = 'PENDING' | 'APPROVED' | 'SUSPENDED';
-export type PlanId = 'Free' | 'Pro' | 'Enterprise';
+export type PlanId = 'Free' | 'Pro' | 'Business' | 'Enterprise';
 export type TxStatus = 'succeeded' | 'pending' | 'failed' | 'refunded';
 
 export function isCeo(role?: string | null): boolean {

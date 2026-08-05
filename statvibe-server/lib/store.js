@@ -32,7 +32,16 @@ const DB_FILE = process.env.STATVIBE_DB
     : path.join(__dirname, '..', 'data', 'db.json');
 const DATA_DIR = path.dirname(DB_FILE);
 
-const EMPTY = { users: {}, byEmail: {}, byPhone: {}, byTag: {}, sessions: {}, accounts: {}, inventory: {}, ideas: {}, aiHistory: {}, conversations: {}, messages: {}, payments: [], admins: {}, adminSessions: {} };
+const EMPTY = {
+  users: {}, byEmail: {}, byPhone: {}, byTag: {}, sessions: {}, accounts: {},
+  inventory: {}, ideas: {}, aiHistory: {}, conversations: {}, messages: {},
+  payments: [],
+  paymentTransactions: [],
+  subscriptionsConfig: null,
+  userSubscriptions: {},
+  systemNotifications: [],
+  admins: {}, adminSessions: {},
+};
 const fresh = () => JSON.parse(JSON.stringify(EMPTY));
 
 let db = fresh();
@@ -77,6 +86,16 @@ function mergePreferLocal(local, remote) {
   for (const p of (remote.payments || [])) if (p && p.id) payMap.set(p.id, p);
   for (const p of (local.payments || [])) if (p && p.id) payMap.set(p.id, p);
   out.payments = [...payMap.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 500);
+  const txMap = new Map();
+  for (const p of (remote.paymentTransactions || [])) if (p && p.id) txMap.set(p.id, p);
+  for (const p of (local.paymentTransactions || [])) if (p && p.id) txMap.set(p.id, p);
+  out.paymentTransactions = [...txMap.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 500);
+  out.subscriptionsConfig = local.subscriptionsConfig || remote.subscriptionsConfig || null;
+  out.userSubscriptions = { ...(remote.userSubscriptions || {}), ...(local.userSubscriptions || {}) };
+  const noteMap = new Map();
+  for (const n of (remote.systemNotifications || [])) if (n && n.id) noteMap.set(n.id, n);
+  for (const n of (local.systemNotifications || [])) if (n && n.id) noteMap.set(n.id, n);
+  out.systemNotifications = [...noteMap.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 200);
   const now = Date.now();
   for (const [t, s] of Object.entries(out.sessions)) {
     if (s && s.expiresAt && s.expiresAt < now) delete out.sessions[t];
@@ -454,15 +473,104 @@ const store = {
     return clone((db.payments || []).slice(0, limit));
   },
   async paymentStats() {
-    const list = db.payments || [];
-    const paid = list.filter((p) => p.status === 'paid' || p.status === 'demo');
+    const list = [...(db.paymentTransactions || []), ...(db.payments || [])];
+    const paid = list.filter((p) => p.status === 'paid' || p.status === 'demo' || p.status === 'succeeded');
     const byPlan = {};
     let revenue = 0;
     for (const p of paid) {
       byPlan[p.plan || 'Unknown'] = (byPlan[p.plan || 'Unknown'] || 0) + 1;
-      revenue += Number(p.amount) || 0;
+      revenue += Number(p.totalCents != null ? p.totalCents / 100 : p.amount) || 0;
     }
     return { total: list.length, paid: paid.length, revenue, byPlan };
+  },
+
+  // --- subscriptions config / user subscriptions / transactions / notifications ---
+  async getSubscriptionsConfig() {
+    return clone(db.subscriptionsConfig || null);
+  },
+  async setSubscriptionsConfig(cfg) {
+    db.subscriptionsConfig = cfg;
+    await persist();
+    return clone(db.subscriptionsConfig);
+  },
+  async getUserSubscription(userId) {
+    return clone((db.userSubscriptions || {})[userId] || null);
+  },
+  async setUserSubscription(userId, sub) {
+    (db.userSubscriptions ||= {})[userId] = sub;
+    await persist();
+    return clone(sub);
+  },
+  async addPaymentTransaction(row) {
+    (db.paymentTransactions ||= []).unshift(row);
+    if (db.paymentTransactions.length > 500) db.paymentTransactions.length = 500;
+    // Keep legacy payments[] in sync for admin summary compatibility.
+    (db.payments ||= []).unshift({
+      id: row.id,
+      userId: row.userId,
+      email: row.email,
+      name: row.name,
+      plan: row.plan,
+      amount: row.totalCents != null ? row.totalCents / 100 : row.amount,
+      currency: row.currency || 'USD',
+      status: row.status,
+      source: row.source || 'paymongo',
+      sourceId: row.providerPaymentId || row.checkoutSessionId || row.sourceId || null,
+      createdAt: row.createdAt || Date.now(),
+    });
+    if (db.payments.length > 500) db.payments.length = 500;
+    await persist();
+    return clone(row);
+  },
+  async findPaymentTransactionByProviderId(providerId) {
+    if (!providerId) return null;
+    const list = db.paymentTransactions || [];
+    return clone(list.find((p) =>
+      p.providerPaymentId === providerId
+      || p.checkoutSessionId === providerId
+      || p.sourceId === providerId
+      || p.idempotencyKey === providerId
+    ) || null);
+  },
+  async updatePaymentTransaction(id, patch) {
+    const it = (db.paymentTransactions || []).find((p) => p.id === id);
+    if (!it) return null;
+    Object.assign(it, patch);
+    if (it.sourceId || it.checkoutSessionId || it.providerPaymentId) {
+      const legacy = (db.payments || []).find((p) => p.id === id || p.sourceId === it.checkoutSessionId || p.sourceId === it.providerPaymentId);
+      if (legacy) Object.assign(legacy, { status: it.status, amount: it.totalCents != null ? it.totalCents / 100 : legacy.amount });
+    }
+    await persist();
+    return clone(it);
+  },
+  async listPaymentTransactions(limit = 80) {
+    return clone((db.paymentTransactions || []).slice(0, limit));
+  },
+  async listSystemNotifications({ includeInactive = false } = {}) {
+    const now = Date.now();
+    let list = db.systemNotifications || [];
+    if (!includeInactive) {
+      list = list.filter((n) => {
+        if (n.active === false) return false;
+        if (n.startsAt && n.startsAt > now) return false;
+        if (n.endsAt && n.endsAt < now) return false;
+        return true;
+      });
+    }
+    return clone(list);
+  },
+  async upsertSystemNotification(note) {
+    const list = (db.systemNotifications ||= []);
+    const idx = list.findIndex((n) => n.id === note.id);
+    if (idx >= 0) list[idx] = { ...list[idx], ...note, updatedAt: Date.now() };
+    else list.unshift({ ...note, createdAt: note.createdAt || Date.now() });
+    if (list.length > 200) list.length = 200;
+    await persist();
+    return clone(idx >= 0 ? list[idx] : list[0]);
+  },
+  async deleteSystemNotification(id) {
+    db.systemNotifications = (db.systemNotifications || []).filter((n) => n.id !== id);
+    await persist();
   },
 
   // --- admin accounts (developers) ---
