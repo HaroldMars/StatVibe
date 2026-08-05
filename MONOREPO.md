@@ -1,12 +1,15 @@
 # StatVibe — Multi-project Vercel architecture
 
-Three Vercel projects from one monorepo:
+Four Vercel projects from one monorepo:
 
 | Package | Root Directory | Production URL | Role |
 |---------|----------------|----------------|------|
 | `statvibe-server/` | `statvibe-server` | https://statvibe-server.vercel.app | Express API, auth, durable store |
 | `statvibe-client/` | `statvibe-client` | https://stat-vibe.vercel.app | Vite SPA (dashboard) |
 | `statvibe-landing/` | `statvibe-landing` | https://statvibe-landing.vercel.app | Next.js marketing |
+| `statvibe-admin/` | `statvibe-admin` | https://statvibe-admin.vercel.app | Next.js Admin Dashboard (CEO / employees) |
+
+> **Hobby limit:** Vercel Hobby can attach up to **3** projects to one GitHub repo. If you already use server + client + landing, Admin needs Pro or you swap one project.
 
 The repo root still contains the legacy combined SPA + API used by Illuminary Peak Hobby (`stat-vibe`) until Root Directories are switched per project.
 
@@ -31,6 +34,15 @@ VITE_API_URL=https://statvibe-server.vercel.app
 
 ```
 NEXT_PUBLIC_CLIENT_URL=https://stat-vibe.vercel.app
+```
+
+### Admin (`statvibe-admin`)
+
+```
+ADMIN_JWT_SECRET=...
+ADMIN_CEO_USERNAME=GenAdmin
+ADMIN_CEO_PASSWORD=...
+ADMIN_CEO_NAME=Jay Harold Mars Abejar
 ```
 
 ## CORS strategy (server)
@@ -58,18 +70,18 @@ All `/api/*` traffic is forwarded to the shared `requestHandler` in `server.js`.
 - **Server** — Node serverless entry `api/index.js`, catch-all route to Express.
 - **Client** — static build → `dist`, SPA fallback to `index.html`.
 - **Landing** — Next.js framework defaults.
+- **Admin** — Next.js framework defaults (`statvibe-admin`).
 
-## Cutover — three separate Vercel projects
-
-Hobby can attach up to **3 projects** to one GitHub repo. Create them like this:
+## Cutover — separate Vercel projects
 
 1. Vercel → **Add New → Project** → import `HaroldMars/StatVibe`
 2. Click **Edit** next to Root Directory and pick one folder:
    - `statvibe-server` → project name `statvibe-server`
    - `statvibe-client` → project name `stat-vibe` (keeps https://stat-vibe.vercel.app)
    - `statvibe-landing` → project name `statvibe-landing`
+   - `statvibe-admin` → project name `statvibe-admin`
 3. Set env vars from each package’s `.env.example`, then Deploy.
-4. Repeat for the other two folders.
+4. Repeat for the other folders.
 
 Or one-shot with a token:
 
@@ -91,4 +103,7 @@ cd statvibe-client && npm i && NEXT_PUBLIC_API_URL=http://127.0.0.1:3000 npm run
 
 # Landing
 cd statvibe-landing && npm i && npm run dev
+
+# Admin
+cd statvibe-admin && npm i && npm run dev
 ```
