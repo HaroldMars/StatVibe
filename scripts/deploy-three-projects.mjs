@@ -12,6 +12,7 @@
  *   - statvibe-server  (rootDirectory: statvibe-server)
  *   - stat-vibe        (rootDirectory: statvibe-client)  — keeps canonical domain name
  *   - statvibe-landing (rootDirectory: statvibe-landing)
+ *   - statvibe-admin   (rootDirectory: statvibe-admin)   — Admin Dashboard
  */
 'use strict';
 
@@ -69,6 +70,33 @@ const PROJECTS = [
       {
         key: 'NEXT_PUBLIC_API_URL',
         value: 'https://statvibe-server.vercel.app',
+        target: ['production', 'preview', 'development'],
+      },
+    ],
+  },
+  {
+    name: 'statvibe-admin',
+    rootDirectory: 'statvibe-admin',
+    framework: 'nextjs',
+    env: [
+      {
+        key: 'ADMIN_JWT_SECRET',
+        value: process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'change-me-admin-jwt',
+        target: ['production', 'preview', 'development'],
+      },
+      {
+        key: 'ADMIN_CEO_USERNAME',
+        value: process.env.ADMIN_CEO_USERNAME || 'GenAdmin',
+        target: ['production', 'preview', 'development'],
+      },
+      {
+        key: 'ADMIN_CEO_PASSWORD',
+        value: process.env.ADMIN_CEO_PASSWORD || process.env.ADMIN_PASSWORD || 'genadmin-2026',
+        target: ['production', 'preview', 'development'],
+      },
+      {
+        key: 'ADMIN_CEO_NAME',
+        value: process.env.ADMIN_CEO_NAME || 'Jay Harold Mars Abejar',
         target: ['production', 'preview', 'development'],
       },
     ],
@@ -204,7 +232,9 @@ function deployProject(spec, project) {
   console.log('  https://statvibe-server.vercel.app');
   console.log('  https://stat-vibe.vercel.app');
   console.log('  https://statvibe-landing.vercel.app');
+  console.log('  https://statvibe-admin.vercel.app');
   console.log('\nSet DATABASE_URL / MONGO_URI / AI_* on statvibe-server in the Vercel dashboard if not already present.');
+  console.log('Hobby repos are limited to 3 Git-linked projects — Admin may need Pro or a free slot.');
 })().catch((e) => {
   console.error(e.message || e);
   process.exit(1);
