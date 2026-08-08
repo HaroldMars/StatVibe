@@ -57,16 +57,17 @@
     }
     .logo-glow {
       width: 220px; height: 220px; border-radius: 52px;
-      background: linear-gradient(145deg, var(--indigo-soft), var(--indigo));
+      background: #fff;
       box-shadow:
-        0 0 0 1px rgba(255,255,255,.2),
-        0 30px 80px rgba(88,101,242,.55),
-        0 0 120px rgba(88,101,242,.45);
+        0 0 0 1px rgba(255,255,255,.35),
+        0 28px 70px rgba(0,0,0,.35),
+        0 0 100px rgba(192,242,109,.28),
+        0 0 140px rgba(196,181,253,.22);
       display: grid; place-items: center;
       animation: logoPop 1.4s cubic-bezier(.2,.9,.2,1) both;
       overflow: hidden;
     }
-    .logo-glow img { width: 100%; height: 100%; object-fit: cover; }
+    .logo-glow img { width: 100%; height: 100%; object-fit: cover; display: block; }
     @keyframes logoPop {
       0% { transform: scale(.4); opacity: 0; filter: blur(12px); }
       60% { transform: scale(1.06); opacity: 1; filter: blur(0); }
@@ -245,7 +246,7 @@
     <section class="scene" id="s1">
       <div class="logo-wrap">
         <div class="logo-glow" style="width:160px;height:160px;border-radius:40px;animation:none">
-          <img src="../assets/statvibe-logo-enhanced.png" alt="" />
+          <img src="../assets/statvibe-logo-enhanced.png" alt="StatVibe" />
         </div>
         <div class="wordmark">StatVibe</div>
         <p class="tagline">Business noise hides.<br /><em>StatVibe</em> hunts the signal.</p>

@@ -28,4 +28,4 @@ Before publishing any ad or social cut:
 - [ ] No App Store badges unless store URLs are live
 - [ ] No “live alerts” montage using sample alert cards as product truth
 - [ ] Plans copy matches Free / Pro / Business / Enterprise + beta VAT story
-- [ ] Logo is StatVibe **S** mark (enhanced asset OK; no third-party gem/sparkle marks)
+- [ ] Logo is StatVibe **four-pointed star** from `logo-main.png` (not the indigo “S” SVG)

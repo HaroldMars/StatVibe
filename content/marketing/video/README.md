@@ -19,7 +19,8 @@ node render-ad.mjs
 ## Source
 
 - `statvibe-ad.html` — timed scenes
-- `../assets/statvibe-logo-enhanced.png` — enhanced S mark (not a third-party gem icon)
+- `../assets/logo-main.png` — official StatVibe star mark (source of truth)
+- `../assets/statvibe-logo-enhanced.png` — hi-res enhancement of the same star (not the old “S” SVG)
 
 ## Reference
 

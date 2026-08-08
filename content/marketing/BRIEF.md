@@ -8,8 +8,8 @@ User reference file: `ba847374-3d44-45df-87da-82e30d5ee36e.mp4` (local machine).
 Cloud agent could not read that path. Structure mirrors premium AI product ads; **theme, palette, logo, and UI are StatVibe-original** to avoid copyright conflict.
 
 ## Brand
-- Logo: enhanced StatVibe **S** icon + wordmark
-- Colors: indigo `#5865f2` / `#7b87ff`, ink `#18213f`, soft lilac bg `#f6f7ff`, dark stage `#0B0F19`
+- Logo: official StatVibe **four-pointed star** (`logo-main.png`) + wordmark — never the old indigo “S” SVG
+- Colors: indigo `#5865f2` / `#7b87ff` for app UI chrome; logo glow mint/lavender to match the mark; dark stage `#0B0F19`
 - Fonts: IBM Plex Sans (UI), Fraunces (display moments)
 
 ## Storyboard (≈30s)

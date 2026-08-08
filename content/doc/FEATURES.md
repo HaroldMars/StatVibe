@@ -51,7 +51,7 @@ Source of truth for marketing. If it is not listed as **Shipped**, do not show i
 - Fonts: IBM Plex Sans + IBM Plex Mono
 - Accent: `#5865f2` (indigo), deep `#3e4dd8`
 - Light bg `#f6f7ff`; dark bg `#0B0F19`
-- Logo: rounded indigo square with white **S** (`logo-main.png` / `logo.svg`)
+- Logo: white rounded square with mint→lavender **four-pointed star** (`logo-main.png`)
 
 **Landing**
 - Fonts: Fraunces + Sora
