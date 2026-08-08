@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>StatVibe — Product Ad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --indigo: #5865f2;
+      --indigo-soft: #7b87ff;
+      --ink: #18213f;
+      --lilac: #f6f7ff;
+      --muted: #6b7394;
+      --dark: #0B0F19;
+      --teal-ui: #5865f2;
+      --emerald: #10B981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1920px; height: 1080px; overflow: hidden;
+      background: var(--dark);
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: #fff;
+    }
+    .stage {
+      position: relative;
+      width: 1920px; height: 1080px;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 40%, rgba(88,101,242,.35), transparent 60%),
+        radial-gradient(ellipse 50% 40% at 20% 80%, rgba(123,135,255,.18), transparent 50%),
+        radial-gradient(ellipse 40% 30% at 85% 20%, rgba(16,185,129,.12), transparent 50%),
+        var(--dark);
+      overflow: hidden;
+    }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0;
+      animation: orbIn 2.2s ease forwards;
+    }
+    .orb.a { width: 520px; height: 520px; left: 28%; top: 10%; background: rgba(88,101,242,.55); }
+    .orb.b { width: 380px; height: 380px; right: 12%; bottom: 8%; background: rgba(123,135,255,.4); animation-delay: .3s; }
+    @keyframes orbIn { to { opacity: 1; } }
+
+    .scene {
+      position: absolute; inset: 0;
+      display: grid; place-items: center;
+      opacity: 0; pointer-events: none;
+    }
+    .scene.on { animation: sceneIn .7s ease forwards; }
+    .scene.off { animation: sceneOut .45s ease forwards; }
+    @keyframes sceneIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+    @keyframes sceneOut { to { opacity: 0; transform: scale(1.02); } }
+
+    .logo-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 28px;
+    }
+    .logo-glow {
+      width: 220px; height: 220px; border-radius: 52px;
+      background: linear-gradient(145deg, var(--indigo-soft), var(--indigo));
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.2),
+        0 30px 80px rgba(88,101,242,.55),
+        0 0 120px rgba(88,101,242,.45);
+      display: grid; place-items: center;
+      animation: logoPop 1.4s cubic-bezier(.2,.9,.2,1) both;
+      overflow: hidden;
+    }
+    .logo-glow img { width: 100%; height: 100%; object-fit: cover; }
+    @keyframes logoPop {
+      0% { transform: scale(.4); opacity: 0; filter: blur(12px); }
+      60% { transform: scale(1.06); opacity: 1; filter: blur(0); }
+      100% { transform: scale(1); }
+    }
+    .wordmark {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 96px; font-weight: 650; letter-spacing: -0.03em;
+      animation: fadeUp .8s .5s both;
+    }
+    .tagline {
+      margin-top: -8px;
+      font-size: 28px; color: rgba(255,255,255,.78); font-weight: 500;
+      text-align: center; line-height: 1.35; max-width: 900px;
+      animation: fadeUp .8s .85s both;
+    }
+    .tagline em { color: var(--indigo-soft); font-style: normal; font-weight: 650; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(22px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .row {
+      display: flex; align-items: center; gap: 80px;
+      width: 1600px; justify-content: center;
+    }
+    .copy {
+      flex: 1; max-width: 620px;
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--indigo-soft); margin-bottom: 16px;
+    }
+    .copy h2 {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 56px; font-weight: 650; line-height: 1.1; letter-spacing: -.02em;
+      margin-bottom: 18px;
+    }
+    .copy p { font-size: 22px; line-height: 1.45; color: rgba(255,255,255,.72); }
+
+    /* Phone — matches StatVibe SPA chrome */
+    .phone {
+      width: 340px; height: 700px; border-radius: 44px;
+      background: var(--lilac); color: var(--ink);
+      box-shadow: 0 40px 100px rgba(0,0,0,.45), 0 0 0 10px #1a2038, 0 0 0 12px #2a3358;
+      overflow: hidden; position: relative;
+      animation: phoneIn .9s cubic-bezier(.2,.85,.2,1) both;
+    }
+    @keyframes phoneIn {
+      from { opacity: 0; transform: translateY(40px) rotate(2deg); }
+      to { opacity: 1; transform: none; }
+    }
+    .phone-bar {
+      height: 54px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px; font-size: 13px; font-weight: 650; color: var(--ink);
+      background: rgba(255,255,255,.7); border-bottom: 1px solid rgba(88,101,242,.12);
+    }
+    .phone-bar .biz { display: flex; align-items: center; gap: 8px; }
+    .avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--indigo); color: #fff; display: grid; place-items: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .phone-body { padding: 16px 16px 70px; }
+    .chip {
+      font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .big { font-family: "IBM Plex Mono", monospace; font-size: 34px; font-weight: 600; color: var(--ink); }
+    .delta { color: var(--emerald); font-size: 13px; font-weight: 650; margin-top: 4px; }
+    .card {
+      background: #fff; border: 1px solid rgba(88,101,242,.14); border-radius: 16px;
+      padding: 14px; margin-top: 12px; box-shadow: 0 8px 24px rgba(24,33,63,.06);
+    }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .mini { background: #fff; border: 1px solid rgba(88,101,242,.12); border-radius: 12px; padding: 10px; }
+    .mini .k { font-size: 10px; font-weight: 650; color: var(--muted); text-transform: uppercase; }
+    .mini .v { font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600; margin-top: 4px; }
+    .chart {
+      height: 88px; margin-top: 10px; border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(88,101,242,.18), transparent),
+        repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(88,101,242,.06) 28px, rgba(88,101,242,.06) 29px);
+      position: relative; overflow: hidden;
+    }
+    .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .tabs {
+      position: absolute; left: 12px; right: 12px; bottom: 12px; height: 56px;
+      border-radius: 18px; background: #fff; border: 1px solid rgba(88,101,242,.15);
+      display: grid; grid-template-columns: repeat(6, 1fr); align-items: center;
+      font-size: 9px; font-weight: 650; color: var(--muted); text-align: center;
+      box-shadow: 0 10px 30px rgba(24,33,63,.1);
+    }
+    .tabs .on { color: var(--indigo); }
+
+    .dual { display: flex; gap: 28px; }
+    .panel {
+      width: 380px; height: 420px; border-radius: 28px; padding: 28px;
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+      backdrop-filter: blur(8px);
+      animation: fadeUp .7s both;
+    }
+    .panel:nth-child(2) { animation-delay: .15s; }
+    .panel h3 { font-size: 28px; font-weight: 700; margin: 12px 0 10px; }
+    .panel p { color: rgba(255,255,255,.7); font-size: 17px; line-height: 1.45; }
+    .icon {
+      width: 52px; height: 52px; border-radius: 16px;
+      background: linear-gradient(145deg, var(--indigo-soft), var(--indigo));
+      display: grid; place-items: center; font-size: 22px; font-weight: 700;
+    }
+
+    .plan-card {
+      width: 420px; border-radius: 24px; padding: 28px;
+      background: #fff; color: var(--ink);
+      box-shadow: 0 30px 80px rgba(0,0,0,.35);
+      animation: phoneIn .8s both;
+    }
+    .plan-card .sale {
+      display: inline-block; background: #E0A030; color: #1a1200;
+      font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px;
+    }
+    .price { font-family: "IBM Plex Mono", monospace; font-size: 48px; font-weight: 600; }
+    .struck { text-decoration: line-through; opacity: .45; font-size: 22px; margin-right: 10px; }
+    .vat { font-size: 14px; color: var(--muted); margin-top: 8px; }
+    .btn {
+      margin-top: 18px; width: 100%; height: 48px; border: 0; border-radius: 12px;
+      background: var(--indigo); color: #fff; font-weight: 700; font-size: 16px;
+    }
+
+    .cta {
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+    .cta .logo-glow { width: 140px; height: 140px; border-radius: 36px; }
+    .cta h2 { font-family: Fraunces, Georgia, serif; font-size: 64px; font-weight: 650; }
+    .cta .url {
+      margin-top: 8px; font-size: 22px; color: var(--indigo-soft); font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .cta .pill {
+      margin-top: 10px; padding: 14px 28px; border-radius: 999px;
+      background: linear-gradient(135deg, var(--indigo-soft), var(--indigo));
+      font-weight: 700; font-size: 18px;
+      box-shadow: 0 16px 40px rgba(88,101,242,.45);
+    }
+
+    .particles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .dot {
+      position: absolute; width: 3px; height: 3px; border-radius: 50%;
+      background: rgba(255,255,255,.35);
+      animation: drift 8s linear infinite;
+    }
+    @keyframes drift {
+      from { transform: translateY(40px); opacity: 0; }
+      20% { opacity: .7; }
+      to { transform: translateY(-1080px); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+    <div class="particles" id="particles"></div>
+
+    <!-- 0: Logo bloom -->
+    <section class="scene" id="s0">
+      <div class="logo-wrap">
+        <div class="logo-glow">
+          <img src="../assets/statvibe-logo-enhanced.png" alt="StatVibe" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 1: Brand + tagline -->
+    <section class="scene" id="s1">
+      <div class="logo-wrap">
+        <div class="logo-glow" style="width:160px;height:160px;border-radius:40px;animation:none">
+          <img src="../assets/statvibe-logo-enhanced.png" alt="" />
+        </div>
+        <div class="wordmark">StatVibe</div>
+        <p class="tagline">Business noise hides.<br /><em>StatVibe</em> hunts the signal.</p>
+      </div>
+    </section>
+
+    <!-- 2: Stats / revenue -->
+    <section class="scene" id="s2">
+      <div class="row">
+        <div class="copy">
+          <div class="eyebrow">Stats · Live</div>
+          <h2>Net volume that moves with every sale.</h2>
+          <p>Log sales and refunds. Watch Live, Day, Week, and Month — the same indigo Stats tab in the app.</p>
+        </div>
+        <div class="phone">
+          <div class="phone-bar">
+            <div class="biz"><span class="avatar">SV</span> Northwind Co</div>
+            <span style="color:var(--indigo)">●</span>
+          </div>
+          <div class="phone-body">
+            <div class="chip">Net volume · live</div>
+            <div class="big">$24,860</div>
+            <div class="delta">▲ 12.4% vs last period</div>
+            <div class="card">
+              <div class="chip">Cumulative</div>
+              <div class="chart">
+                <svg viewBox="0 0 280 88" preserveAspectRatio="none">
+                  <path d="M0 70 C40 65, 60 50, 90 48 S140 55, 170 30 S230 20, 280 12" fill="none" stroke="#5865f2" stroke-width="3"/>
+                  <path d="M0 70 C40 65, 60 50, 90 48 S140 55, 170 30 S230 20, 280 12 V88 H0 Z" fill="url(#g)"/>
+                  <defs>
+                    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#5865f2" stop-opacity=".35"/>
+                      <stop offset="1" stop-color="#5865f2" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+            </div>
+            <div class="grid3">
+              <div class="mini"><div class="k">Revenue</div><div class="v">$24.8k</div></div>
+              <div class="mini"><div class="k">Products</div><div class="v">128</div></div>
+              <div class="mini"><div class="k">Avg price</div><div class="v">$42</div></div>
+            </div>
+          </div>
+          <div class="tabs">
+            <div class="on">Stats</div><div>Map</div><div>Calc</div><div>Hub</div><div>AI</div><div>Agent</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3: Calc + Map -->
+    <section class="scene" id="s3">
+      <div class="dual">
+        <div class="panel">
+          <div class="icon">%</div>
+          <h3>Calculator & supply</h3>
+          <p>Retail markup, target-margin pricing, inventory stock, and days-left predictions — on the Calc tab.</p>
+        </div>
+        <div class="panel">
+          <div class="icon">◎</div>
+          <h3>Map & branches</h3>
+          <p>Drop pins, save branches, track stock health, and fly the map — real Leaflet ops in Map.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4: AI + Agent -->
+    <section class="scene" id="s4">
+      <div class="row">
+        <div class="phone">
+          <div class="phone-bar"><div class="biz"><span class="avatar">AI</span> Workspace</div><span style="font-size:11px;color:var(--indigo);font-weight:700">Auto</span></div>
+          <div class="phone-body">
+            <div class="card" style="background:linear-gradient(180deg,#eef0ff,#fff)">
+              <div class="chip">Prompt</div>
+              <div style="font-size:14px;font-weight:600;line-height:1.4;margin-top:6px">Draft a restock plan from low-stock branches and this week’s net volume.</div>
+            </div>
+            <div class="card">
+              <div class="chip">Output · Live</div>
+              <div style="font-size:13px;line-height:1.5;color:var(--muted);margin-top:6px">Prioritize Branch B (cover 4 days). Hold Summit Pack reorder until Friday sales clear…</div>
+            </div>
+            <div class="card" style="margin-top:14px">
+              <div class="chip">AgentTech</div>
+              <div style="font-size:13px;font-weight:650;margin-top:4px">AI draft → Approve & send</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">Chat by StatVibe tag · My QR</div>
+            </div>
+          </div>
+          <div class="tabs">
+            <div>Stats</div><div>Map</div><div>Calc</div><div>Hub</div><div class="on">AI</div><div>Agent</div>
+          </div>
+        </div>
+        <div class="copy">
+          <div class="eyebrow">AI · AgentTech</div>
+          <h2>Copilots for ops and conversations.</h2>
+          <p>AI Workspace with Auto blend and Gemini Flash models. AgentTech drafts replies you approve — plus a real StatVibe QR.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5: Plans -->
+    <section class="scene" id="s5">
+      <div class="row">
+        <div class="copy">
+          <div class="eyebrow">Plans · Beta sale</div>
+          <h2>Upgrade when usage grows.</h2>
+          <p>Free weekly tokens. Pro and Business with first-time beta prices. VAT is excluded from list price — 12% added at checkout.</p>
+        </div>
+        <div class="plan-card">
+          <div class="sale">Beta sale</div>
+          <div style="font-size:22px;font-weight:700;margin-bottom:8px">Pro</div>
+          <div><span class="struck">$20</span><span class="price">$10</span><span style="color:var(--muted)">/mo</span></div>
+          <div class="vat">+ 12% VAT $1.20 · total $11.20</div>
+          <div style="margin-top:16px;font-size:14px;color:var(--muted);line-height:1.45">1,000,000 AI tokens / month · workspaces · project hub</div>
+          <button class="btn" type="button">Upgrade to Pro</button>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e6e9f5;font-size:13px;color:var(--muted)">
+            Business <span class="struck" style="font-size:14px">$79</span> <b style="color:var(--ink)">$49</b> · + VAT $5.88 → $54.88
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6: CTA -->
+    <section class="scene" id="s6">
+      <div class="cta">
+        <div class="logo-glow">
+          <img src="../assets/statvibe-logo-enhanced.png" alt="StatVibe" />
+        </div>
+        <h2>StatVibe</h2>
+        <p style="font-size:24px;color:rgba(255,255,255,.75)">One screen for revenue, inventory, ideas, and AI.</p>
+        <div class="pill">Launch free</div>
+        <div class="url">stat-vibe.vercel.app</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Lightweight particles
+    const p = document.getElementById('particles');
+    for (let i = 0; i < 40; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot';
+      d.style.left = Math.random() * 100 + '%';
+      d.style.top = Math.random() * 100 + '%';
+      d.style.animationDelay = (Math.random() * 8) + 's';
+      d.style.animationDuration = (6 + Math.random() * 6) + 's';
+      p.appendChild(d);
+    }
+
+    const scenes = ['s0','s1','s2','s3','s4','s5','s6'].map((id) => document.getElementById(id));
+    // Timeline in ms — total ~30s
+    const timeline = [
+      { id: 0, at: 0, hold: 2800 },
+      { id: 1, at: 2800, hold: 3200 },
+      { id: 2, at: 6000, hold: 5000 },
+      { id: 3, at: 11000, hold: 4000 },
+      { id: 4, at: 15000, hold: 5000 },
+      { id: 5, at: 20000, hold: 5000 },
+      { id: 6, at: 25000, hold: 5000 },
+    ];
+
+    let current = -1;
+    function show(i) {
+      scenes.forEach((el, idx) => {
+        el.classList.remove('on', 'off');
+        if (idx === i) el.classList.add('on');
+        else if (idx === current) el.classList.add('off');
+      });
+      current = i;
+    }
+
+    // Expose for renderer
+    window.__STATVIBE_AD__ = {
+      durationMs: 30000,
+      ready: true,
+      start() {
+        timeline.forEach((t) => setTimeout(() => show(t.id), t.at));
+      },
+    };
+  </script>
+</body>
+</html>
