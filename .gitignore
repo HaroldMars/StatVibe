@@ -21,3 +21,6 @@ statvibe-server/data/
 statvibe-admin/.next/
 statvibe-admin/node_modules/
 .tools/
+
+content/marketing/video/node_modules/
+content/marketing/video/out/*.webm
